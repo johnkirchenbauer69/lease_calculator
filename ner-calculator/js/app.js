@@ -128,6 +128,9 @@
       const baseInput = toNum(row.querySelector('.cx-base'));
       const base = (mode === 'stop' && baseInput > 0) ? baseInput : null; // optional, only for stop
 
+      // If stop mode and base is blank, default to Year-1 value
+      if (mode === 'stop' && !base) base = rate;
+
       return { id, label, rate, growth, unit, mode, base };
     }).filter(r => r.rate > 0);
   }
