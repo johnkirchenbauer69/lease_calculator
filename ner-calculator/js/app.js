@@ -2165,64 +2165,60 @@
       const area = Number(row.area) || defaultArea || 0;
       const cashFactor = Number(row.cashFactor) || 1;
       const base$ = Number(row.netTotal) || 0;
+      const gross$ = Number(row.totals?.monthlyCashOut ?? (row.grossTotal || 0)) || 0;
       const taxes$ = Number(row.tenantTaxes$) || 0;
       const cam$ = Number(row.tenantCam$) || 0;
       const ins$ = Number(row.tenantIns$) || 0;
       const mgmt$ = Number(row.tenantMgmt$) || 0;
-      const customItems = Array.isArray(row.customItems) ? row.customItems : [];
-      const customOpEx = {};
-      let customTotal$ = 0;
-      customItems.forEach((item, idx) => {
-        const key = item.id || `custom-${idx + 1}`;
-        const tenant$ = Number(item.tenantDollars) || 0;
-        customTotal$ += tenant$;
-        customOpEx[key] = {
-          label: item.label || key,
-          mode: item.mode || 'tenant',
-          baseAnnual: item.baseAnnual ?? null,
-          psf: annualPSFFromDollars(tenant$, area, cashFactor)
-        };
-      });
-      const totalOpEx$ = taxes$ + cam$ + ins$ + mgmt$ + customTotal$;
-      const totalCashOut = base$ + totalOpEx$;
-      const basePsf = annualPSFFromDollars(base$, area, cashFactor);
-      const taxesPsf = annualPSFFromDollars(taxes$, area, cashFactor);
-      const camPsf = annualPSFFromDollars(cam$, area, cashFactor);
-      const insPsf = annualPSFFromDollars(ins$, area, cashFactor);
-      const mgmtPsf = annualPSFFromDollars(mgmt$, area, cashFactor);
-      const customTotalPsf = annualPSFFromDollars(customTotal$, area, cashFactor);
+
+      const baseRentPSF = annualPSFFromDollars(base$, area, cashFactor);
+      const taxesPSF = annualPSFFromDollars(taxes$, area, cashFactor);
+      const camPSF = annualPSFFromDollars(cam$, area, cashFactor);
+      const insPSF = annualPSFFromDollars(ins$, area, cashFactor);
+      const mgmtPSF = annualPSFFromDollars(mgmt$, area, cashFactor);
+      const grossPSF = annualPSFFromDollars(gross$, area, cashFactor);
+
+      const rowTotals = {
+        monthlyNet: base$,
+        monthlyGross: gross$,
+        monthlyCashOut: gross$,
+        grossOccPSF: grossPSF
+      };
+
       return {
         period: row.monthIndex,
         year: row.calYear,
         month: row.calMonth,
         spaceSize: area,
         cashFactor,
-        baseRentPsfYr: basePsf,
-        opEx: {
-          taxes: { psf: taxesPsf },
-          cam: { psf: camPsf },
-          ins: { psf: insPsf },
-          mgmt: { psf: mgmtPsf },
-          custom: customOpEx,
-          customTotalPsf: customTotalPsf
-        },
-        totals: {
-          monthlyCashOut: totalCashOut,
-          grossOccPSF: annualPSFFromDollars(totalCashOut, area, cashFactor)
-        }
+        baseRentPSF,
+        taxesPSF,
+        camPSF,
+        insPSF,
+        mgmtPSF,
+        grossPSF,
+        monthlyNet$: base$,
+        monthlyGross$: gross$,
+        totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
+        opEx: row.opEx,
+        customItems: row.customItems
       };
     });
   }
 
   function buildLandlordSchedule(model) {
     const schedule = Array.isArray(model?.schedule) ? model.schedule : [];
+    const defaultArea = Number(model?.area) || 0;
     return schedule.map(row => {
-      const baseCollected = Number(row.netTotal) || 0;
+      const area = Number(row.area) || defaultArea || 0;
+      const cashFactor = Number(row.cashFactor) || 1;
+      const baseCollected$ = Number(row.netTotal) || 0;
       const taxesRecovery = Number(row.tenantTaxes$) || 0;
       const camRecovery = Number(row.tenantCam$) || 0;
       const insRecovery = Number(row.tenantIns$) || 0;
       const mgmtRecovery = Number(row.tenantMgmt$) || 0;
       const customItems = Array.isArray(row.customItems) ? row.customItems : [];
+
       const customRecoveries = {};
       let customRecovery = 0;
       let customLandlordBurden = 0;
@@ -2242,28 +2238,61 @@
       });
 
       const totalRecovery = taxesRecovery + camRecovery + insRecovery + mgmtRecovery + customRecovery;
-      const totalCashIn = baseCollected + totalRecovery;
+      const totalCashIn$ = Number(row.totals?.totalCashIn ?? (baseCollected$ + totalRecovery)) || 0;
 
+      const llTaxes$ = Number(row.llTaxes$) || 0;
+      const llCam$ = Number(row.llCam$) || 0;
+      const llIns$ = Number(row.llIns$) || 0;
+      const llMgmt$ = Number(row.llMgmt$) || 0;
+      const llOther$ = Number(row.llOther$) || 0;
+
+      const landlordOpEx = llTaxes$ + llCam$ + llIns$ + llOther$ + llMgmt$ + customLandlordBurden;
       const freeRent = Number(row.freeBase$) || 0;
       const tiOutlay = Number(row.tiOutlayThisPeriod) || 0;
       const lcOutlay = Number(row.lcOutlayThisPeriod) || 0;
 
-      const landlordOpEx =
-        (Number(row.llTaxes$) || 0) +
-        (Number(row.llCam$) || 0) +
-        (Number(row.llIns$) || 0) +
-        (Number(row.llOther$) || 0) +
-        (Number(row.llMgmt$) || 0) +
-        customLandlordBurden;
+      const netCash = totalCashIn$ - freeRent - tiOutlay - lcOutlay - landlordOpEx;
+      const unrecoveredOpEx = landlordOpEx - totalRecovery;
 
-      const netCash = totalCashIn - freeRent - tiOutlay - lcOutlay - landlordOpEx;
-      const unrecoveredOpEx = totalRecovery - landlordOpEx;
+      const baseRentPSF_LL = annualPSFFromDollars(baseCollected$, area, cashFactor);
+      const taxesPSF_LL = annualPSFFromDollars(llTaxes$, area, cashFactor);
+      const camPSF_LL = annualPSFFromDollars(llCam$, area, cashFactor);
+      const insPSF_LL = annualPSFFromDollars(llIns$, area, cashFactor);
+      const mgmtPSF_LL = annualPSFFromDollars(llMgmt$, area, cashFactor);
+      const grossPSF_LL = annualPSFFromDollars(totalCashIn$, area, cashFactor);
+
+      const monthlyNet$ = baseCollected$;
+      const monthlyGross$ = totalCashIn$;
+
+      const rowTotals = {
+        totalCashIn: totalCashIn$,
+        freeRent,
+        tiOutlay,
+        lcOutlay,
+        netCash,
+        landlordOpEx,
+        tenantRecovery: totalRecovery,
+        unrecoveredOpEx,
+        monthlyNet: monthlyNet$,
+        monthlyGross: monthlyGross$
+      };
 
       return {
         period: row.monthIndex,
         year: row.calYear,
         month: row.calMonth,
-        baseCollected,
+        spaceSize: area,
+        cashFactor,
+        baseRentPSF_LL,
+        taxesPSF_LL,
+        camPSF_LL,
+        insPSF_LL,
+        mgmtPSF_LL,
+        grossPSF_LL,
+        monthlyNet$,
+        monthlyGross$,
+        baseCollected: baseCollected$,
+        totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
         recoveries: {
           taxes: taxesRecovery,
           cam: camRecovery,
@@ -2271,22 +2300,12 @@
           mgmt: mgmtRecovery,
           custom: customRecoveries
         },
-        totals: {
-          totalCashIn,
-          freeRent,
-          tiOutlay,
-          lcOutlay,
-          netCash,
-          landlordOpEx,
-          tenantRecovery: totalRecovery,
-          unrecoveredOpEx
-        }
+        customItems: row.customItems
       };
     });
   }
 
   function renderScheduleTable(model, perspective, table, thead, tbody) {
-    const serviceType = (model?.serviceType || '').toLowerCase();
     const rows = perspective === 'tenant'
       ? buildTenantSchedule(model)
       : buildLandlordSchedule(model);
@@ -2297,183 +2316,65 @@
       return;
     }
 
-    const columns = [];
-    columns.push({ key: 'period', label: 'Period', render: r => r.period });
-    columns.push({ key: 'year', label: 'Year', render: r => r.year });
-    columns.push({ key: 'month', label: 'Month', render: r => r.month });
-
+    const serviceType = (model?.serviceType || '').toLowerCase();
     const coreModes = model?.coreOpExModes || {};
     const normalizeMode = (mode) => (mode || '').toLowerCase();
-    const tenantLabel = (base, mode) => ((serviceType === 'mg_stop') || normalizeMode(mode) === 'stop')
-      ? `${base} Over Base Year`
-      : base;
 
+    const tenantSchemaBase = [
+      { key: 'period', label: 'Period', render: r => r.period },
+      { key: 'year', label: 'Year', render: r => r.year },
+      { key: 'month', label: 'Month', render: r => r.month },
+      { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
+      { key: 'baseRentPSF', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF || 0) }
+    ];
+
+    const tenantOpCols = [
+      { key: 'taxesPSF', base: 'Taxes', mode: coreModes.taxes },
+      { key: 'camPSF', base: 'CAM', mode: coreModes.cam },
+      { key: 'insPSF', base: 'Insurance', mode: coreModes.ins },
+      { key: 'mgmtPSF', base: 'Management Fee', mode: coreModes.mgmt }
+    ];
+
+    const tenantTail = [
+      { key: 'grossPSF', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF || 0) },
+      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
+      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
+    ];
+
+    const landlordSchema = [
+      { key: 'period', label: 'Period', render: r => r.period },
+      { key: 'year', label: 'Year', render: r => r.year },
+      { key: 'month', label: 'Month', render: r => r.month },
+      { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
+      { key: 'baseRentPSF_LL', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF_LL || 0) },
+      { key: 'taxesPSF_LL', label: 'Taxes ($/SF/yr)', render: r => fmtUSD(r.taxesPSF_LL || 0) },
+      { key: 'camPSF_LL', label: 'CAM ($/SF/yr)', render: r => fmtUSD(r.camPSF_LL || 0) },
+      { key: 'insPSF_LL', label: 'Insurance ($/SF/yr)', render: r => fmtUSD(r.insPSF_LL || 0) },
+      { key: 'mgmtPSF_LL', label: 'Management Fee ($/SF/yr)', render: r => fmtUSD(r.mgmtPSF_LL || 0) },
+      { key: 'grossPSF_LL', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF_LL || 0) },
+      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
+      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
+    ];
+
+    let schema;
     if (perspective === 'tenant') {
-      const formatSF = (value) => Number(value || 0).toLocaleString();
-      columns.push({ key: 'space_size', label: 'Space Size (SF)', render: r => formatSF(r.spaceSize ?? model?.area ?? 0) });
-      columns.push({ key: 'base_psf', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPsfYr || 0) });
-
-      const standardCats = [
-        { key: 'taxes', base: 'Taxes', mode: coreModes.taxes },
-        { key: 'cam', base: 'CAM', mode: coreModes.cam },
-        { key: 'ins', base: 'Insurance', mode: coreModes.ins },
-        { key: 'mgmt', base: 'Management Fee', mode: coreModes.mgmt }
-      ];
-
-      standardCats.forEach(cat => {
-        const hasTenantShare = rows.some(r => (r.opEx?.[cat.key]?.psf || 0) !== 0);
-        if (hasTenantShare) {
-          const labelBase = tenantLabel(cat.base, cat.mode);
-          columns.push({
-            key: `${cat.key}_psf`,
-            label: `${labelBase} ($/SF/yr)`,
-            render: r => fmtUSD(r.opEx?.[cat.key]?.psf || 0)
-          });
-        }
-      });
-
-      const customMeta = new Map();
-      rows.forEach(row => {
-        const custom = row.opEx?.custom;
-        if (!custom) return;
-        Object.entries(custom).forEach(([key, entry]) => {
-          if (!entry) return;
-          if (!customMeta.has(key)) {
-            customMeta.set(key, { label: entry.label || key, mode: entry.mode || 'tenant' });
-          }
-        });
-      });
-
-      let customIdx = 0;
-      customMeta.forEach((meta, dataKey) => {
-        const hasTenantShare = rows.some(r => (r.opEx?.custom?.[dataKey]?.psf || 0) !== 0);
-        if (hasTenantShare) {
-          const colId = `custom_${++customIdx}`;
-          const displayLabel = tenantLabel(meta.label, meta.mode);
-          columns.push({
-            key: `${colId}_psf`,
-            label: `${displayLabel} ($/SF/yr)`,
-            render: r => fmtUSD(r.opEx?.custom?.[dataKey]?.psf || 0)
-          });
-        }
-      });
-      columns.push({
-        key: 'gross_occ',
-        label: 'Gross Occupancy Cost ($/SF/yr)',
-        render: r => fmtUSD(r.totals.grossOccPSF)
-      });
-      columns.push({
-        key: 'cash_out',
-        label: 'Monthly Cash Out ($)',
-        render: r => fmtUSD(r.totals.monthlyCashOut),
-        sum: r => r.totals.monthlyCashOut
-      });
+      const optionalCols = tenantOpCols
+        .filter(col => rows.some(r => Math.abs(Number(r[col.key] || 0)) > 1e-9))
+        .map(col => ({
+          key: col.key,
+          label: (serviceType === 'mg_stop' || normalizeMode(col.mode) === 'stop')
+            ? `${col.base} Over Base ($/SF/yr)`
+            : `${col.base} ($/SF/yr)`,
+          render: r => fmtUSD(Number(r[col.key] || 0))
+        }));
+      schema = [...tenantSchemaBase, ...optionalCols, ...tenantTail];
     } else {
-      const recoveryLabel = (base, mode) => ((serviceType === 'mg_stop') || normalizeMode(mode) === 'stop')
-        ? `${base} Recovery (Over Base Year)`
-        : `${base} Recovery`;
-
-      columns.push({
-        key: 'base_collected',
-        label: 'Base Rent Collected ($)',
-        render: r => fmtUSD(r.baseCollected),
-        sum: r => r.baseCollected
-      });
-
-      const recoveryCats = [
-        { key: 'taxes', base: 'Taxes', mode: coreModes.taxes },
-        { key: 'cam', base: 'CAM', mode: coreModes.cam },
-        { key: 'ins', base: 'Insurance', mode: coreModes.ins },
-        { key: 'mgmt', base: 'Management Fee', mode: coreModes.mgmt }
-      ];
-
-      recoveryCats.forEach(cat => {
-        const total = rows.reduce((acc, r) => acc + (r.recoveries?.[cat.key] || 0), 0);
-        if (total !== 0) {
-          const labelBase = recoveryLabel(cat.base, cat.mode);
-          columns.push({
-            key: `rec_${cat.key}`,
-            label: `${labelBase} ($)`,
-            render: r => fmtUSD(r.recoveries?.[cat.key] || 0),
-            sum: r => r.recoveries?.[cat.key] || 0
-          });
-        }
-      });
-
-      const customRecoveryMeta = new Map();
-      rows.forEach(row => {
-        const custom = row.recoveries?.custom;
-        if (!custom) return;
-        Object.entries(custom).forEach(([key, entry]) => {
-          if (!entry) return;
-          if (!customRecoveryMeta.has(key)) {
-            customRecoveryMeta.set(key, { label: entry.label || key, mode: entry.mode || 'tenant' });
-          }
-        });
-      });
-
-      let customRecIdx = 0;
-      customRecoveryMeta.forEach((meta, dataKey) => {
-        const total = rows.reduce((acc, r) => acc + (r.recoveries?.custom?.[dataKey]?.total || 0), 0);
-        if (total !== 0) {
-          const colId = `rec_custom_${++customRecIdx}`;
-          const displayLabel = recoveryLabel(meta.label, meta.mode);
-          columns.push({
-            key: `${colId}`,
-            label: `${displayLabel} ($)`,
-            render: r => fmtUSD(r.recoveries?.custom?.[dataKey]?.total || 0),
-            sum: r => r.recoveries?.custom?.[dataKey]?.total || 0
-          });
-        }
-      });
-
-      columns.push({
-        key: 'total_cash_in',
-        label: 'Total Cash In ($)',
-        render: r => fmtUSD(r.totals.totalCashIn),
-        sum: r => r.totals.totalCashIn
-      });
-      columns.push({
-        key: 'landlord_opx',
-        label: 'Landlord OpEx ($)',
-        render: r => fmtUSD(r.totals.landlordOpEx),
-        sum: r => r.totals.landlordOpEx
-      });
-      columns.push({
-        key: 'free_rent',
-        label: 'Free Rent Concession ($)',
-        render: r => fmtUSD(r.totals.freeRent),
-        sum: r => r.totals.freeRent
-      });
-      columns.push({
-        key: 'ti_outlay',
-        label: 'TI Outlay ($)',
-        render: r => fmtUSD(r.totals.tiOutlay),
-        sum: r => r.totals.tiOutlay
-      });
-      columns.push({
-        key: 'lc_outlay',
-        label: 'Leasing Commission ($)',
-        render: r => fmtUSD(r.totals.lcOutlay),
-        sum: r => r.totals.lcOutlay
-      });
-      columns.push({
-        key: 'net_cash',
-        label: 'Net Cash To Landlord ($)',
-        render: r => fmtUSD(r.totals.netCash),
-        sum: r => r.totals.netCash
-      });
-      columns.push({
-        key: 'unrecovered_opx',
-        label: 'Unrecovered OpEx ($)',
-        render: r => fmtUSD(r.totals.unrecoveredOpEx),
-        sum: r => r.totals.unrecoveredOpEx
-      });
+      schema = landlordSchema;
     }
 
     thead.innerHTML = '';
     const headerRow = document.createElement('tr');
-    columns.forEach(col => {
+    schema.forEach(col => {
       const th = document.createElement('th');
       th.textContent = col.label;
       headerRow.appendChild(th);
@@ -2481,11 +2382,11 @@
     thead.appendChild(headerRow);
 
     tbody.innerHTML = '';
-    const totals = new Array(columns.length).fill(0);
+    const totals = new Array(schema.length).fill(0);
 
     rows.forEach(row => {
       const tr = document.createElement('tr');
-      columns.forEach((col, idx) => {
+      schema.forEach((col, idx) => {
         const td = document.createElement('td');
         td.textContent = col.render(row);
         tr.appendChild(td);
@@ -2498,7 +2399,7 @@
 
     const totalRow = document.createElement('tr');
     totalRow.classList.add('grand-total');
-    columns.forEach((col, idx) => {
+    schema.forEach((col, idx) => {
       const td = document.createElement('td');
       if (idx === 0) {
         td.textContent = 'Grand Total';
