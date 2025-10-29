@@ -42,6 +42,20 @@
 
   function fmtPSF(v) { return (isFinite(v) ? `$${v.toFixed(2)}/SF` : '$0.00/SF'); }
 
+  /**
+   * Determine whether OpEx dollars should contribute to the displayed “gross”
+   * totals for a given perspective/service-type pairing. Landlord-facing NNN
+   * (including Absolute/Triple Net variants) treats pass-through OpEx as
+   * neutral, so gross should equal base rent in that case.
+   */
+  function includeOpExInGross(perspective, serviceType) {
+    const view = (perspective || '').toString().toLowerCase();
+    const type = (serviceType || '').toString().toLowerCase();
+    const isNNN = type.includes('nnn') || type.includes('triple');
+    if (view === 'landlord' && isNNN) return false;
+    return true;
+  }
+
   // -- Commissions & NPV chip (define once, top-level) -------------------------
   function updateCommNpvChip() {
     const pct = (rawPercentFromInput('brokerCommission') || 0) * 100; // 0..100
@@ -1886,6 +1900,17 @@
       const avgNetMonthly = term > 0 ? (totalPaidNet / term) : 0;
       const avgGrossMonthly = term > 0 ? (totalPaidGross / term) : 0;
 
+      const grossSummaries = summarizeGrossByPerspective({
+        schedule,
+        area,
+        serviceType: type
+      });
+      const perspectiveKey = (activePerspective === 'tenant') ? 'tenant' : 'landlord';
+      const grossSummaryForCards = grossSummaries[perspectiveKey] || grossSummaries.tenant || {
+        avgMonthlyGross: avgGrossMonthly,
+        totalGross: totalPaidGross
+      };
+
       // ----- KPI: Spread & Recovery
       const avgMonthlySpread = (totalPaidGross - totalPaidNet) / term;           // $/mo
       const recoveryRatio = (tenantOpExNominal + totalLLOpex) > 0
@@ -1993,9 +2018,9 @@
       if (nerPVEl) nerPVEl.textContent = formatUSD(nerPV);
       if (nerSimpleEl) nerSimpleEl.textContent = formatUSD(nerSimple);
       if (avgNetMonthlyEl) avgNetMonthlyEl.textContent = formatUSD(avgNetMonthly);
-      if (avgGrossMonthlyEl) avgGrossMonthlyEl.textContent = formatUSD(avgGrossMonthly);
+      if (avgGrossMonthlyEl) avgGrossMonthlyEl.textContent = formatUSD(grossSummaryForCards.avgMonthlyGross);
       if (totalNetEl) totalNetEl.textContent = formatUSD(totalPaidNet);
-      if (totalGrossEl) totalGrossEl.textContent = formatUSD(totalPaidGross);
+      if (totalGrossEl) totalGrossEl.textContent = formatUSD(grossSummaryForCards.totalGross);
     
       function renderKpis(data) {
         // ... existing KPI assignments (lease starts/ends, totals, etc.)
@@ -2050,6 +2075,7 @@
       };
       model.perspective = (localStorage.getItem('ner_perspective') || 'landlord');
       model.hasOtherOpEx = hasOtherOpEx;
+      model.grossSummaries = grossSummaries;
 
       // attach the computed extras
       model.kpis = {
@@ -2161,28 +2187,38 @@
   function buildTenantSchedule(model) {
     const schedule = Array.isArray(model?.schedule) ? model.schedule : [];
     const defaultArea = Number(model?.area) || 0;
+    const serviceType = model?.serviceType || '';
+    const includeGross = includeOpExInGross('tenant', serviceType);
+
     return schedule.map(row => {
       const area = Number(row.area) || defaultArea || 0;
       const cashFactor = Number(row.cashFactor) || 1;
       const base$ = Number(row.netTotal) || 0;
-      const gross$ = Number(row.totals?.monthlyCashOut ?? (row.grossTotal || 0)) || 0;
+      const grossRaw$ = Number(row.totals?.monthlyCashOut ?? (row.grossTotal || 0)) || 0;
       const taxes$ = Number(row.tenantTaxes$) || 0;
       const cam$ = Number(row.tenantCam$) || 0;
       const ins$ = Number(row.tenantIns$) || 0;
       const mgmt$ = Number(row.tenantMgmt$) || 0;
+      const customItems = Array.isArray(row.customItems) ? row.customItems : [];
+      const customTenant$ = customItems.reduce((sum, item) => sum + (Number(item.tenantDollars) || 0), 0);
 
       const baseRentPSF = annualPSFFromDollars(base$, area, cashFactor);
       const taxesPSF = annualPSFFromDollars(taxes$, area, cashFactor);
       const camPSF = annualPSFFromDollars(cam$, area, cashFactor);
       const insPSF = annualPSFFromDollars(ins$, area, cashFactor);
       const mgmtPSF = annualPSFFromDollars(mgmt$, area, cashFactor);
-      const grossPSF = annualPSFFromDollars(gross$, area, cashFactor);
+
+      const displayGross$ = includeGross
+        ? grossRaw$
+        : base$;
+      const grossPSF = annualPSFFromDollars(displayGross$, area, cashFactor);
 
       const rowTotals = {
         monthlyNet: base$,
-        monthlyGross: gross$,
-        monthlyCashOut: gross$,
-        grossOccPSF: grossPSF
+        monthlyGross: displayGross$,
+        monthlyCashOut: grossRaw$,
+        grossOccPSF: grossPSF,
+        tenantOpExMonthly: taxes$ + cam$ + ins$ + mgmt$ + customTenant$
       };
 
       return {
@@ -2198,7 +2234,7 @@
         mgmtPSF,
         grossPSF,
         monthlyNet$: base$,
-        monthlyGross$: gross$,
+        monthlyGross$: displayGross$,
         totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
         opEx: row.opEx,
         customItems: row.customItems
@@ -2209,6 +2245,9 @@
   function buildLandlordSchedule(model) {
     const schedule = Array.isArray(model?.schedule) ? model.schedule : [];
     const defaultArea = Number(model?.area) || 0;
+    const serviceType = model?.serviceType || '';
+    const includeGross = includeOpExInGross('landlord', serviceType);
+
     return schedule.map(row => {
       const area = Number(row.area) || defaultArea || 0;
       const cashFactor = Number(row.cashFactor) || 1;
@@ -2254,15 +2293,18 @@
       const netCash = totalCashIn$ - freeRent - tiOutlay - lcOutlay - landlordOpEx;
       const unrecoveredOpEx = landlordOpEx - totalRecovery;
 
+      const nonOpExCash$ = totalCashIn$ - totalRecovery;
+      const displayGross$ = includeGross ? totalCashIn$ : nonOpExCash$;
+
       const baseRentPSF_LL = annualPSFFromDollars(baseCollected$, area, cashFactor);
       const taxesPSF_LL = annualPSFFromDollars(llTaxes$, area, cashFactor);
       const camPSF_LL = annualPSFFromDollars(llCam$, area, cashFactor);
       const insPSF_LL = annualPSFFromDollars(llIns$, area, cashFactor);
       const mgmtPSF_LL = annualPSFFromDollars(llMgmt$, area, cashFactor);
-      const grossPSF_LL = annualPSFFromDollars(totalCashIn$, area, cashFactor);
+      const grossPSF_LL = annualPSFFromDollars(displayGross$, area, cashFactor);
 
       const monthlyNet$ = baseCollected$;
-      const monthlyGross$ = totalCashIn$;
+      const monthlyGross$ = displayGross$;
 
       const rowTotals = {
         totalCashIn: totalCashIn$,
@@ -2303,6 +2345,25 @@
         customItems: row.customItems
       };
     });
+  }
+
+  function summarizeGrossByPerspective(model) {
+    const tenantRows = buildTenantSchedule(model);
+    const landlordRows = buildLandlordSchedule(model);
+
+    const summarize = (rows) => {
+      const totalGross = rows.reduce((sum, r) => sum + (Number(r.monthlyGross$) || 0), 0);
+      const months = rows.length || 0;
+      return {
+        totalGross,
+        avgMonthlyGross: months ? totalGross / months : 0
+      };
+    };
+
+    return {
+      tenant: summarize(tenantRows),
+      landlord: summarize(landlordRows)
+    };
   }
 
   function renderScheduleTable(model, perspective, table, thead, tbody) {
@@ -2437,6 +2498,7 @@ function renderAnnual(data, table, thead, tbody) {
 
   const hasOther = !!data.hasOtherOpEx;
   const hasMgmt  = (data.mgmt?.ratePct || 0) > 0;
+  const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
 
   // Tags aggregated across the whole schedule
   const taxTag   = hdrBadge(payerLabel(data.schedule, 'taxes'));
@@ -2478,7 +2540,9 @@ function renderAnnual(data, table, thead, tbody) {
     const insPSF  = rows.reduce((s,r)=> s + ((r.tenPSF?.ins)   || 0), 0) / months;
     const othPSF  = hasOther ? (rows.reduce((s,r)=> s + ((r.tenPSF?.other) || 0), 0) / months) : 0;
     const mgmtPSF = hasMgmt ?  (rows.reduce((s,r)=> s + ((r.tenPSF?.mgmt)  || 0), 0) / months) : 0;
-    const grossPSF= rows.reduce((s,r)=> s + ((r.tenPSF?.gross) || 0), 0) / months;
+    const grossPSF= includeGross
+      ? rows.reduce((s,r)=> s + ((r.tenPSF?.gross) || 0), 0) / months
+      : netPSF;
     
 
     // show mgmt PSF, but only count tenant-paid share in gross PSF
@@ -2486,7 +2550,9 @@ function renderAnnual(data, table, thead, tbody) {
     const mgmtPSFTenant = hasMgmt ? (rows.reduce((s,r)=> s + ((r.tenantMgmt$ > 0 ? (r.contractMgmtAnnualPSF || 0) : 0)), 0) / months) : 0;
 
     const totalNet     = rows.reduce((s,r)=> s + r.netTotal,   0);
-    const totalGross   = rows.reduce((s,r)=> s + r.grossTotal, 0);
+    const totalGross   = includeGross
+      ? rows.reduce((s,r)=> s + (r.grossTotal || 0), 0)
+      : rows.reduce((s,r)=> s + (r.netTotal || 0), 0);
     const monthlyNet   = totalNet   / months;
     const monthlyGross = totalGross / months;
 
@@ -2514,7 +2580,9 @@ function renderAnnual(data, table, thead, tbody) {
 
   // Grand Total (sum $ columns; $/SF/yr columns are averages, so not additive)
   const grandNet   = data.schedule.reduce((s, r) => s + (r.netTotal   || 0), 0);
-  const grandGross = data.schedule.reduce((s, r) => s + (r.grossTotal || 0), 0);
+  const grandGross = includeGross
+    ? data.schedule.reduce((s, r) => s + (r.grossTotal || 0), 0)
+    : data.schedule.reduce((s, r) => s + (r.netTotal || 0), 0);
 
   // Label spans through the new Gross Rent ($/SF/yr) column
   const labelColspan =
@@ -2552,6 +2620,7 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
 
   const hasOther = !!data.hasOtherOpEx;
   const hasMgmt  = (data.mgmt?.ratePct || 0) > 0;
+  const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
 
   // Dynamic payer badges under each OpEx header
   const taxTag = hdrBadge(payerLabel(data.schedule, 'taxes'));
@@ -2627,7 +2696,9 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
     const othAnn  = hasOther ? (r.isGrossAbated ? 0 : (r.contractOtherAnnualPSF || 0)) : 0;
     const mgmtAnn = hasMgmt  ? (r.isGrossAbated ? 0 : (r.contractMgmtAnnualPSF || 0)) : 0;
 
-    const grossAnn = netAnn + taxAnn + camAnn + insAnn + othAnn + (hasMgmt ? mgmtAnn : 0);
+    const grossAnn = includeGross
+      ? netAnn + taxAnn + camAnn + insAnn + othAnn + (hasMgmt ? mgmtAnn : 0)
+      : netAnn;
 
     const tr = document.createElement('tr');
     const cells = [
@@ -2642,7 +2713,8 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
     ];
     if (hasOther) cells.push(fmtUSD(othAnn));
     if (hasMgmt)  cells.push(fmtUSD(mgmtAnn));
-    cells.push(fmtUSD(grossAnn), fmtUSD(r.netTotal), fmtUSD(r.grossTotal));
+    const grossTotalForRow = includeGross ? (r.grossTotal || 0) : (r.netTotal || 0);
+    cells.push(fmtUSD(grossAnn), fmtUSD(r.netTotal), fmtUSD(grossTotalForRow));
 
     cells.forEach(v => {
       const td = document.createElement('td');
@@ -2655,9 +2727,9 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
 
     // Totals
     yNet       += (r.netTotal   || 0);
-    yGross     += (r.grossTotal || 0);
+    yGross     += grossTotalForRow;
     grandNet   += (r.netTotal   || 0);
-    grandGross += (r.grossTotal || 0);
+    grandGross += grossTotalForRow;
   });
 
   // Final year subtotal
@@ -2690,7 +2762,9 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   document.getElementById('exportPdf')?.addEventListener('click', () => window.ExportPDF?.openDialog());
   document.getElementById('exportExcel')?.addEventListener('click', () => window.ExportExcel?.downloadExcel());
 
+  window.includeOpExInGross = includeOpExInGross;
   window.buildTenantSchedule = buildTenantSchedule;
   window.buildLandlordSchedule = buildLandlordSchedule;
+  window.summarizeGrossByPerspective = summarizeGrossByPerspective;
   window.renderScheduleTable = renderScheduleTable;
 })();
