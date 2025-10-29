@@ -125,7 +125,8 @@
       const growth = toNum(row.querySelector('.cx-growth'));       // % or $ depending on unit
       const unit = (row.querySelector('.cx-growthUnit')?.value === 'flat') ? 'flat' : 'pct';
       const mode = (row.querySelector('.cx-mode')?.value || 'tenant').toLowerCase(); // tenant|stop|landlord
-      let base = toNum(row.querySelector('.cx-base'));         // optional, only for stop
+      const baseInput = toNum(row.querySelector('.cx-base'));
+      const base = (mode === 'stop' && baseInput > 0) ? baseInput : null; // optional, only for stop
 
       // If stop mode and base is blank, default to Year-1 value
       if (mode === 'stop' && !base) base = rate;
@@ -178,13 +179,69 @@
   // ---------- show/hide the “Custom expenses” section when serviceType changes
   const serviceTypeEl = document.getElementById('serviceType');
   const customSection = document.getElementById('customExpSection');
-  function toggleCustomUI() {
-    const isCustom = serviceTypeEl?.value === 'custom';
-    customSection?.classList.toggle('hidden', !isCustom);
-    // You likely already show Taxes/CAM/Ins for MG/NNN; for Custom keep them visible
+  const mgmtModeSelect = document.getElementById('mgmtMode');
+  const mgmtBaseWrap = document.getElementById('mgmtBaseWrap');
+
+  function defaultOpExModeForService(type) {
+    switch ((type || '').toLowerCase()) {
+      case 'gross':
+        return 'landlord';
+      case 'mg_stop':
+        return 'stop';
+      default:
+        return 'tenant';
+    }
   }
-  serviceTypeEl?.addEventListener('change', toggleCustomUI);
-  toggleCustomUI(); // initial
+
+  function syncMgmtModeUI() {
+    if (!mgmtModeSelect || !mgmtBaseWrap) return;
+    const isStop = (mgmtModeSelect.value || '').toLowerCase() === 'stop';
+    mgmtBaseWrap.style.display = isStop ? '' : 'none';
+  }
+
+  function syncCustomRowModeDefaults(type) {
+    if ((type || '').toLowerCase() === 'custom') return;
+    if (!customList) return;
+    const desired = defaultOpExModeForService(type);
+    customList.querySelectorAll('.cx-row').forEach(row => {
+      if (!row) return;
+      if (row.dataset.autoMode === '0') return;
+      const sel = row.querySelector('.cx-mode');
+      if (!sel) return;
+      if (desired) sel.value = desired;
+      row.dataset.autoMode = '1';
+      updateCustomRowModeUI(row);
+    });
+  }
+
+  function handleServiceTypeChange() {
+    const type = (serviceTypeEl?.value || 'nnn').toLowerCase();
+    customSection?.classList.remove('hidden');
+    if (mgmtModeSelect) {
+      mgmtModeSelect.dataset.auto = (type === 'custom') ? '0' : '1';
+      if (type !== 'custom') {
+        const def = defaultOpExModeForService(type);
+        if (def) mgmtModeSelect.value = def;
+      }
+      syncMgmtModeUI();
+    }
+    syncCustomRowModeDefaults(type);
+  }
+
+  serviceTypeEl?.addEventListener('change', () => {
+    handleServiceTypeChange();
+    calculate();
+  });
+  handleServiceTypeChange();
+
+  mgmtModeSelect?.addEventListener('change', () => {
+    if (mgmtModeSelect) mgmtModeSelect.dataset.auto = '0';
+    syncMgmtModeUI();
+    calculate();
+  });
+
+  document.getElementById('mgmtBase')
+    ?.addEventListener('change', calculate);
 
   // Toggle "Advanced" panels
   document.addEventListener('click', (e) => {
@@ -217,14 +274,20 @@
     const node = rowTpl.content.firstElementChild.cloneNode(true);
     node.dataset.idx = (++customRowSeq).toString();
 
+    const serviceType = (serviceTypeEl?.value || 'nnn').toLowerCase();
+    const defaultMode = defaultOpExModeForService(serviceType) || 'tenant';
+    const initialMode = prefill.mode ?? defaultMode;
+
     // prefill
     node.querySelector('.cx-label').value = prefill.label ?? '';
     node.querySelector('.cx-val').value = prefill.value != null ? prefill.value : '';
     node.querySelector('.cx-growth').value = (prefill.growth != null && prefill.growthUnit === 'pct')
       ? (prefill.growth * 100).toFixed(2) : (prefill.growth ?? '');
     node.querySelector('.cx-growthUnit').value = prefill.growthUnit ?? 'pct';
-    node.querySelector('.cx-mode').value = prefill.mode ?? 'tenant';
+    node.querySelector('.cx-mode').value = initialMode;
     node.querySelector('.cx-base').value = prefill.base != null ? prefill.base : '';
+
+    node.dataset.autoMode = prefill.mode ? '0' : '1';
 
     // if stop, show base + year-1 kicker
     updateCustomRowModeUI(node);
@@ -498,7 +561,10 @@
     const sel = e.target.closest('.cx-mode');
     if (!sel) return;
     const row = sel.closest('.cx-row');
-    if (row) updateCustomRowModeUI(row);
+    if (row) {
+      row.dataset.autoMode = '0';
+      updateCustomRowModeUI(row);
+    }
   });
 
   // New: always calendar
@@ -1003,7 +1069,7 @@
       // default state
       show('.opx-mode', false);
       show('.opx-base', false);
-      customSection?.classList.add('hidden');
+      customSection?.classList.remove('hidden');
 
       if (v === 'nnn') {
         // Triple-net: tenant pays all; lock switches
@@ -1019,7 +1085,6 @@
         // Universal “Custom” mode
         [incTaxes, incCam, incIns].forEach(cb => cb && (cb.disabled = true));
         show('.opx-mode', true);              // per-line mode selects
-        customSection?.classList.remove('hidden');
       } else {
         // Fallback
         [incTaxes, incCam, incIns].forEach(cb => cb && (cb.disabled = false));
@@ -1046,12 +1111,18 @@
       const node = rowTpl.content.firstElementChild.cloneNode(true);
       node.dataset.idx = String(++rowSeq);
 
+      const serviceType = (serviceType?.value || 'nnn').toLowerCase();
+      const defaultMode = defaultOpExModeForService(serviceType) || 'tenant';
+      const initialMode = prefill.mode ?? defaultMode;
+
       q('.cx-label', node).value = prefill.label ?? '';
       q('.cx-val', node).value = prefill.value ?? '';
       q('.cx-growth', node).value = prefill.growth ?? '';
       q('.cx-growthUnit', node).value = prefill.growthUnit ?? 'pct';
-      q('.cx-mode', node).value = prefill.mode ?? 'tenant';
+      q('.cx-mode', node).value = initialMode;
       q('.cx-base', node).value = prefill.base ?? '';
+
+      node.dataset.autoMode = prefill.mode ? '0' : '1';
 
       updateCustomRowModeUI(node);
       customList.appendChild(node);
@@ -1066,7 +1137,11 @@
     customList?.addEventListener('change', (e) => {
       const sel = e.target.closest('.cx-mode');
       if (!sel) return;
-      updateCustomRowModeUI(sel.closest('.cx-row'));
+      const row = sel.closest('.cx-row');
+      if (row) {
+        row.dataset.autoMode = '0';
+        updateCustomRowModeUI(row);
+      }
     });
     addBtn?.addEventListener('click', () => addCustomRow());
 
@@ -1242,9 +1317,16 @@
       const ins = rawNumberFromInput($('#ins'));
       const mgmtRatePct = +document.getElementById('mgmtRate')?.value || 0; // e.g. 3.0
       const mgmtAppliedOn = document.getElementById('mgmtAppliedOn')?.value || 'gross';
-      const mgmtCfg = { ratePct: mgmtRatePct, appliedOn: mgmtAppliedOn };
+      const mgmtModeSelection = (document.getElementById('mgmtMode')?.value || defaultOpExModeForService(type)).toLowerCase();
+      const mgmtBaseAnnInput = rawNumberFromInput($('#mgmtBase'));
+      const mgmtCfg = {
+        ratePct: mgmtRatePct,
+        appliedOn: mgmtAppliedOn,
+        mode: mgmtModeSelection,
+        baseAnnual: mgmtBaseAnnInput > 0 ? mgmtBaseAnnInput : null
+      };
 
-      const extraOpExRows = (type === 'custom') ? readAdditionalOpEx() : [];
+      const extraOpExRows = readAdditionalOpEx();
       const hasOtherOpEx = extraOpExRows.length > 0;
 
       const taxesGrowthRaw = rawNumberFromInput($('#taxesGrowth'));
@@ -1458,9 +1540,13 @@
         }
       };
 
-      const mgmtRateDecimal = (+mgmtRatePct || 0) / 100;
-      const mgmtStopBaseAnn = (mgmtRateDecimal > 0)
+      const mgmtMode = (mgmtCfg.mode || defaultOpExModeForService(type)).toLowerCase();
+      const mgmtRateDecimal = Math.max(0, mgmtCfg.ratePct || 0) / 100;
+      const autoMgmtBaseAnn = (mgmtRateDecimal > 0)
         ? baseAnnualPSFForIndex(startDate.getMonth() > 0 ? 1 : 0) * mgmtRateDecimal
+        : 0;
+      const mgmtStopBaseAnn = (mgmtMode === 'stop')
+        ? (mgmtCfg.baseAnnual != null && mgmtCfg.baseAnnual > 0 ? mgmtCfg.baseAnnual : autoMgmtBaseAnn)
         : 0;
 
       for (let m = 1; m <= scheduleMonths; m++) {
@@ -1479,15 +1565,15 @@
           const gFlat = (x.unit === 'flat') ? x.growth : 0;
           const otherAnnPSF = growOpEx(x.rate, x.unit, gPct, gFlat, opxYearIndex);
           const otherMoPSF = otherAnnPSF / 12;
-          const stopBaseAnn = (mode === 'stop') ? (x.base || otherAnnPSF) : 0;
-          const share = (mode === 'stop')
-            ? treatCategory('stop', otherMoPSF, stopBaseAnn)
-            : treatCategory(mode, otherMoPSF, stopBaseAnn);
+          const stopBaseAnn = (mode === 'stop')
+            ? (x.base != null ? x.base : autoBaseForStop(x.rate, x.unit, gPct, gFlat))
+            : 0;
+          const share = treatCategory(mode === 'stop' ? 'stop' : mode, otherMoPSF, stopBaseAnn);
           return {
             id: x.id || `custom-${idx + 1}`,
             label: x.label || `Custom ${idx + 1}`,
             mode,
-            baseAnnual: stopBaseAnn || null,
+            baseAnnual: (mode === 'stop') ? stopBaseAnn : null,
             tenantMonthlyPSF: share.tenantPSF,
             landlordMonthlyPSF: share.llPSF,
             tenantAnnualPSF: share.tenantPSF * 12,
@@ -1629,23 +1715,10 @@
           mgmtFee$ = appliedBase * mgmtRateDecimal;
           const mgmtMoPSF = (area && cashFactor) ? (mgmtFee$ / (area * cashFactor)) : 0;
 
-          if (type === 'nnn') {
-            tenantMgmtMoPSFShare = mgmtMoPSF;
-          } else if (type === 'gross') {
-            llMgmtMoPSFShare = mgmtMoPSF;
-          } else if (type === 'mg_stop') {
-            const share = treatCategory('stop', mgmtMoPSF, mgmtStopBaseAnn);
-            tenantMgmtMoPSFShare = share.tenantPSF;
-            llMgmtMoPSFShare = share.llPSF;
-          } else if (type === 'custom') {
-            const mgmtMode = (camMode || 'tenant').toLowerCase();
-            const baseForStop = (mgmtMode === 'stop') ? mgmtStopBaseAnn : 0;
-            const share = (mgmtMode === 'stop')
-              ? treatCategory('stop', mgmtMoPSF, baseForStop)
-              : treatCategory(mgmtMode, mgmtMoPSF, baseForStop);
-            tenantMgmtMoPSFShare = share.tenantPSF;
-            llMgmtMoPSFShare = share.llPSF;
-          }
+          const baseForStop = (mgmtMode === 'stop') ? mgmtStopBaseAnn : 0;
+          const share = treatCategory(mgmtMode === 'stop' ? 'stop' : mgmtMode, mgmtMoPSF, baseForStop);
+          tenantMgmtMoPSFShare = share.tenantPSF;
+          llMgmtMoPSFShare = share.llPSF;
 
           tenantMgmt$ = tenantMgmtMoPSFShare * area * cashFactor;
           llMgmt$ = llMgmtMoPSFShare * area * cashFactor;
@@ -1941,12 +2014,7 @@
       const taxesModeForModel = (type === 'custom') ? taxesMode : (type === 'gross' ? 'landlord' : (type === 'mg_stop' ? 'stop' : 'tenant'));
       const camModeForModel = (type === 'custom') ? camMode : (type === 'gross' ? 'landlord' : (type === 'mg_stop' ? 'stop' : 'tenant'));
       const insModeForModel = (type === 'custom') ? insMode : (type === 'gross' ? 'landlord' : (type === 'mg_stop' ? 'stop' : 'tenant'));
-      const mgmtModeForModel = (() => {
-        if (type === 'custom') return camMode;
-        if (type === 'gross') return 'landlord';
-        if (type === 'mg_stop') return 'stop';
-        return 'tenant';
-      })();
+      const mgmtModeForModel = mgmtMode;
 
       const model = {
         suite,
@@ -2115,29 +2183,31 @@
           label: item.label || key,
           mode: item.mode || 'tenant',
           baseAnnual: item.baseAnnual ?? null,
-          psf: annualPSFFromDollars(tenant$, area, cashFactor),
-          total: tenant$
+          psf: annualPSFFromDollars(tenant$, area, cashFactor)
         };
       });
       const totalOpEx$ = taxes$ + cam$ + ins$ + mgmt$ + customTotal$;
       const totalCashOut = base$ + totalOpEx$;
+      const basePsf = annualPSFFromDollars(base$, area, cashFactor);
+      const taxesPsf = annualPSFFromDollars(taxes$, area, cashFactor);
+      const camPsf = annualPSFFromDollars(cam$, area, cashFactor);
+      const insPsf = annualPSFFromDollars(ins$, area, cashFactor);
+      const mgmtPsf = annualPSFFromDollars(mgmt$, area, cashFactor);
+      const customTotalPsf = annualPSFFromDollars(customTotal$, area, cashFactor);
       return {
         period: row.monthIndex,
         year: row.calYear,
         month: row.calMonth,
         spaceSize: area,
         cashFactor,
-        base: {
-          psf: annualPSFFromDollars(base$, area, cashFactor),
-          total: base$
-        },
+        baseRentPsfYr: basePsf,
         opEx: {
-          taxes: { psf: annualPSFFromDollars(taxes$, area, cashFactor), total: taxes$ },
-          cam: { psf: annualPSFFromDollars(cam$, area, cashFactor), total: cam$ },
-          ins: { psf: annualPSFFromDollars(ins$, area, cashFactor), total: ins$ },
-          mgmt: { psf: annualPSFFromDollars(mgmt$, area, cashFactor), total: mgmt$ },
+          taxes: { psf: taxesPsf },
+          cam: { psf: camPsf },
+          ins: { psf: insPsf },
+          mgmt: { psf: mgmtPsf },
           custom: customOpEx,
-          customTotal: { psf: annualPSFFromDollars(customTotal$, area, cashFactor), total: customTotal$ }
+          customTotalPsf: customTotalPsf
         },
         totals: {
           monthlyCashOut: totalCashOut,
@@ -2190,8 +2260,7 @@
         customLandlordBurden;
 
       const netCash = totalCashIn - freeRent - tiOutlay - lcOutlay - landlordOpEx;
-      const rawUnrecovered = landlordOpEx - totalRecovery;
-      const unrecoveredOpEx = rawUnrecovered > 0 ? -rawUnrecovered : 0;
+      const unrecoveredOpEx = totalRecovery - landlordOpEx;
 
       return {
         period: row.monthIndex,
@@ -2239,13 +2308,13 @@
     const coreModes = model?.coreOpExModes || {};
     const normalizeMode = (mode) => (mode || '').toLowerCase();
     const tenantLabel = (base, mode) => ((serviceType === 'mg_stop') || normalizeMode(mode) === 'stop')
-      ? `${base} Over Base`
+      ? `${base} Over Base Year`
       : base;
 
     if (perspective === 'tenant') {
       const formatSF = (value) => Number(value || 0).toLocaleString();
       columns.push({ key: 'space_size', label: 'Space Size (SF)', render: r => formatSF(r.spaceSize ?? model?.area ?? 0) });
-      columns.push({ key: 'base_psf', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.base.psf) });
+      columns.push({ key: 'base_psf', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPsfYr || 0) });
 
       const standardCats = [
         { key: 'taxes', base: 'Taxes', mode: coreModes.taxes },
@@ -2255,8 +2324,8 @@
       ];
 
       standardCats.forEach(cat => {
-        const total = rows.reduce((acc, r) => acc + (r.opEx?.[cat.key]?.total || 0), 0);
-        if (total !== 0) {
+        const hasTenantShare = rows.some(r => (r.opEx?.[cat.key]?.psf || 0) !== 0);
+        if (hasTenantShare) {
           const labelBase = tenantLabel(cat.base, cat.mode);
           columns.push({
             key: `${cat.key}_psf`,
@@ -2280,8 +2349,8 @@
 
       let customIdx = 0;
       customMeta.forEach((meta, dataKey) => {
-        const total = rows.reduce((acc, r) => acc + (r.opEx?.custom?.[dataKey]?.total || 0), 0);
-        if (total !== 0) {
+        const hasTenantShare = rows.some(r => (r.opEx?.custom?.[dataKey]?.psf || 0) !== 0);
+        if (hasTenantShare) {
           const colId = `custom_${++customIdx}`;
           const displayLabel = tenantLabel(meta.label, meta.mode);
           columns.push({
@@ -2304,7 +2373,7 @@
       });
     } else {
       const recoveryLabel = (base, mode) => ((serviceType === 'mg_stop') || normalizeMode(mode) === 'stop')
-        ? `${base} Recovery (Over Base)`
+        ? `${base} Recovery (Over Base Year)`
         : `${base} Recovery`;
 
       columns.push({
