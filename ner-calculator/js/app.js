@@ -2095,8 +2095,9 @@
 
   function buildTenantSchedule(model) {
     const schedule = Array.isArray(model?.schedule) ? model.schedule : [];
-    const area = Number(model?.area) || 0;
+    const defaultArea = Number(model?.area) || 0;
     return schedule.map(row => {
+      const area = Number(row.area) || defaultArea || 0;
       const cashFactor = Number(row.cashFactor) || 1;
       const base$ = Number(row.netTotal) || 0;
       const taxes$ = Number(row.tenantTaxes$) || 0;
@@ -2124,6 +2125,7 @@
         period: row.monthIndex,
         year: row.calYear,
         month: row.calMonth,
+        spaceSize: area,
         cashFactor,
         base: {
           psf: annualPSFFromDollars(base$, area, cashFactor),
@@ -2183,10 +2185,13 @@
         (Number(row.llTaxes$) || 0) +
         (Number(row.llCam$) || 0) +
         (Number(row.llIns$) || 0) +
-        (Number(row.llOther$) || customLandlordBurden || 0) +
-        (Number(row.llMgmt$) || 0);
+        (Number(row.llOther$) || 0) +
+        (Number(row.llMgmt$) || 0) +
+        customLandlordBurden;
 
       const netCash = totalCashIn - freeRent - tiOutlay - lcOutlay - landlordOpEx;
+      const rawUnrecovered = landlordOpEx - totalRecovery;
+      const unrecoveredOpEx = rawUnrecovered > 0 ? -rawUnrecovered : 0;
 
       return {
         period: row.monthIndex,
@@ -2207,7 +2212,8 @@
           lcOutlay,
           netCash,
           landlordOpEx,
-          unrecoveredOpEx: landlordOpEx - totalRecovery
+          tenantRecovery: totalRecovery,
+          unrecoveredOpEx
         }
       };
     });
@@ -2237,8 +2243,9 @@
       : base;
 
     if (perspective === 'tenant') {
+      const formatSF = (value) => Number(value || 0).toLocaleString();
+      columns.push({ key: 'space_size', label: 'Space Size (SF)', render: r => formatSF(r.spaceSize ?? model?.area ?? 0) });
       columns.push({ key: 'base_psf', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.base.psf) });
-      columns.push({ key: 'base_total', label: 'Base Rent ($)', render: r => fmtUSD(r.base.total), sum: r => r.base.total });
 
       const standardCats = [
         { key: 'taxes', base: 'Taxes', mode: coreModes.taxes },
@@ -2255,12 +2262,6 @@
             key: `${cat.key}_psf`,
             label: `${labelBase} ($/SF/yr)`,
             render: r => fmtUSD(r.opEx?.[cat.key]?.psf || 0)
-          });
-          columns.push({
-            key: `${cat.key}_total`,
-            label: `${labelBase} ($)`,
-            render: r => fmtUSD(r.opEx?.[cat.key]?.total || 0),
-            sum: r => r.opEx?.[cat.key]?.total || 0
           });
         }
       });
@@ -2288,25 +2289,18 @@
             label: `${displayLabel} ($/SF/yr)`,
             render: r => fmtUSD(r.opEx?.custom?.[dataKey]?.psf || 0)
           });
-          columns.push({
-            key: `${colId}_total`,
-            label: `${displayLabel} ($)`,
-            render: r => fmtUSD(r.opEx?.custom?.[dataKey]?.total || 0),
-            sum: r => r.opEx?.custom?.[dataKey]?.total || 0
-          });
         }
-      });
-
-      columns.push({
-        key: 'cash_out',
-        label: 'Monthly Cash Out ($)',
-        render: r => fmtUSD(r.totals.monthlyCashOut),
-        sum: r => r.totals.monthlyCashOut
       });
       columns.push({
         key: 'gross_occ',
         label: 'Gross Occupancy Cost ($/SF/yr)',
         render: r => fmtUSD(r.totals.grossOccPSF)
+      });
+      columns.push({
+        key: 'cash_out',
+        label: 'Monthly Cash Out ($)',
+        render: r => fmtUSD(r.totals.monthlyCashOut),
+        sum: r => r.totals.monthlyCashOut
       });
     } else {
       const recoveryLabel = (base, mode) => ((serviceType === 'mg_stop') || normalizeMode(mode) === 'stop')
@@ -2731,4 +2725,5 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
 
   window.buildTenantSchedule = buildTenantSchedule;
   window.buildLandlordSchedule = buildLandlordSchedule;
+  window.renderScheduleTable = renderScheduleTable;
 })();

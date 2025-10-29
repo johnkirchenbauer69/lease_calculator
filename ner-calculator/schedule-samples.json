@@ -19,74 +19,13 @@
     "tenantRows": [
       {
         "period": 1,
-        "baseTotal": 25000,
-        "taxesTotal": 4166.67,
-        "camTotal": 3333.33,
-        "insTotal": 1666.67,
-        "mgmtTotal": 1025,
-        "monthlyCashOut": 35191.67,
-        "grossOccPSF": 42.23
-      }
-    ],
-    "landlordRows": [
-      {
-        "period": 1,
-        "baseCollected": 25000,
-        "recoveries": 10191.67,
-        "landlordOpEx": 0,
-        "netCash": 35191.67
-      }
-    ]
-  },
-  "mg_stop": {
-    "tenantRows": [
-      {
-        "period": 1,
-        "baseTotal": 25000,
-        "monthlyCashOut": 25000,
-        "grossOccPSF": 30
-      }
-    ],
-    "landlordRows": [
-      {
-        "period": 1,
-        "baseCollected": 25000,
-        "recoveryTotal": 0,
-        "landlordOpEx": 9916.67,
-        "netCash": 15083.33
-      }
-    ]
-  },
-  "gross": {
-    "tenantRows": [
-      {
-        "period": 1,
-        "baseTotal": 25000,
-        "monthlyCashOut": 25000,
-        "grossOccPSF": 30
-      }
-    ],
-    "landlordRows": [
-      {
-        "period": 1,
-        "baseCollected": 25000,
-        "landlordOpEx": 9916.67,
-        "netCash": 15083.33
-      }
-    ]
-  },
-  "custom": {
-    "tenantRows": [
-      {
-        "period": 1,
-        "baseTotal": 25000,
-        "taxesTotal": 4166.67,
-        "mgmtOverBase": 132.5,
-        "custom": {
-          "Security": 250
-        },
-        "monthlyCashOut": 29549.17,
-        "grossOccPSF": 35.46
+        "basePsf": 30,
+        "taxesPsf": 5,
+        "camPsf": 4,
+        "insurancePsf": 2,
+        "mgmtPsf": 1.23,
+        "grossOccPSF": 42.23,
+        "monthlyCashOut": 35191.67
       }
     ],
     "landlordRows": [
@@ -94,23 +33,208 @@
         "period": 1,
         "baseCollected": 25000,
         "taxRecovery": 4166.67,
-        "mgmtRecovery": 132.5,
-        "customRecovery": 250,
-        "landlordOpEx": 7132.5,
-        "netCash": 22416.67
+        "camRecovery": 3333.33,
+        "insRecovery": 1666.67,
+        "mgmtRecovery": 1025,
+        "totalCashIn": 35191.67,
+        "landlordOpEx": 0,
+        "netCash": 35191.67,
+        "unrecoveredOpEx": 0
+      }
+    ]
+  },
+  "mg_stop": {
+    "tenantRows": [
+      {
+        "period": 2,
+        "basePsf": 30,
+        "taxesOverBasePsf": 0.6,
+        "camOverBasePsf": 0.36,
+        "insuranceOverBasePsf": 0.14,
+        "mgmtOverBasePsf": 0.18,
+        "grossOccPSF": 31.28,
+        "monthlyCashOut": 26070
+      }
+    ],
+    "landlordRows": [
+      {
+        "period": 2,
+        "baseCollected": 25000,
+        "taxRecovery": 500,
+        "camRecovery": 300,
+        "insRecovery": 120,
+        "mgmtRecovery": 150,
+        "totalCashIn": 26070,
+        "landlordOpEx": 11000,
+        "netCash": 15070,
+        "unrecoveredOpEx": -9930
+      }
+    ]
+  },
+  "gross": {
+    "tenantRows": [
+      {
+        "period": 1,
+        "basePsf": 30,
+        "grossOccPSF": 30,
+        "monthlyCashOut": 25000
+      }
+    ],
+    "landlordRows": [
+      {
+        "period": 1,
+        "baseCollected": 25000,
+        "totalCashIn": 25000,
+        "landlordOpEx": 10191.67,
+        "netCash": 14808.33,
+        "unrecoveredOpEx": -10191.67
+      }
+    ]
+  },
+  "custom": {
+    "tenantRows": [
+      {
+        "period": 2,
+        "basePsf": 30,
+        "taxesPsf": 5.04,
+        "insuranceOverBasePsf": 0.14,
+        "mgmtPsf": 1.23,
+        "securityPsf": 0.31,
+        "grossOccPSF": 36.73,
+        "monthlyCashOut": 30605
+      }
+    ],
+    "landlordRows": [
+      {
+        "period": 2,
+        "baseCollected": 25000,
+        "taxRecovery": 4200,
+        "insRecovery": 120,
+        "mgmtRecovery": 1025,
+        "securityRecovery": 260,
+        "totalCashIn": 30605,
+        "landlordOpEx": 1700,
+        "netCash": 28905,
+        "unrecoveredOpEx": 0
       }
     ]
   },
   "headers": {
     "tenant": {
-      "gross": ["Period", "Year", "Month", "Base Rent ($/SF/yr)", "Base Rent ($)", "Monthly Cash Out ($)", "Gross Occupancy Cost ($/SF/yr)"],
-      "mg_stop": ["Period", "Year", "Month", "Base Rent ($/SF/yr)", "Base Rent ($)", "Monthly Cash Out ($)", "Gross Occupancy Cost ($/SF/yr)"],
-      "custom": ["Period", "Year", "Month", "Base Rent ($/SF/yr)", "Base Rent ($)", "Taxes ($/SF/yr)", "Taxes ($)", "Management Fee Over Base ($/SF/yr)", "Management Fee Over Base ($)", "Security Over Base ($/SF/yr)", "Security Over Base ($)", "Monthly Cash Out ($)", "Gross Occupancy Cost ($/SF/yr)"]
+      "nnn": [
+        "Period",
+        "Year",
+        "Month",
+        "Space Size (SF)",
+        "Base Rent ($/SF/yr)",
+        "Taxes ($/SF/yr)",
+        "CAM ($/SF/yr)",
+        "Insurance ($/SF/yr)",
+        "Management Fee ($/SF/yr)",
+        "Gross Occupancy Cost ($/SF/yr)",
+        "Monthly Cash Out ($)"
+      ],
+      "mg_stop": [
+        "Period",
+        "Year",
+        "Month",
+        "Space Size (SF)",
+        "Base Rent ($/SF/yr)",
+        "Taxes Over Base ($/SF/yr)",
+        "CAM Over Base ($/SF/yr)",
+        "Insurance Over Base ($/SF/yr)",
+        "Management Fee Over Base ($/SF/yr)",
+        "Gross Occupancy Cost ($/SF/yr)",
+        "Monthly Cash Out ($)"
+      ],
+      "gross": [
+        "Period",
+        "Year",
+        "Month",
+        "Space Size (SF)",
+        "Base Rent ($/SF/yr)",
+        "Gross Occupancy Cost ($/SF/yr)",
+        "Monthly Cash Out ($)"
+      ],
+      "custom": [
+        "Period",
+        "Year",
+        "Month",
+        "Space Size (SF)",
+        "Base Rent ($/SF/yr)",
+        "Taxes ($/SF/yr)",
+        "Insurance Over Base ($/SF/yr)",
+        "Management Fee ($/SF/yr)",
+        "Security ($/SF/yr)",
+        "Gross Occupancy Cost ($/SF/yr)",
+        "Monthly Cash Out ($)"
+      ]
     },
     "landlord": {
-      "nnn": ["Period", "Year", "Month", "Base Rent Collected ($)", "Taxes Recovery ($)", "CAM Recovery ($)", "Insurance Recovery ($)", "Management Fee Recovery ($)", "Total Cash In ($)", "Landlord OpEx ($)", "Free Rent Concession ($)", "TI Outlay ($)", "Leasing Commission ($)", "Net Cash To Landlord ($)", "Unrecovered OpEx ($)"],
-      "gross": ["Period", "Year", "Month", "Base Rent Collected ($)", "Total Cash In ($)", "Landlord OpEx ($)", "Free Rent Concession ($)", "TI Outlay ($)", "Leasing Commission ($)", "Net Cash To Landlord ($)", "Unrecovered OpEx ($)"],
-      "custom": ["Period", "Year", "Month", "Base Rent Collected ($)", "Taxes Recovery ($)", "Management Fee Recovery (Over Base) ($)", "Security Recovery (Over Base) ($)", "Total Cash In ($)", "Landlord OpEx ($)", "Free Rent Concession ($)", "TI Outlay ($)", "Leasing Commission ($)", "Net Cash To Landlord ($)", "Unrecovered OpEx ($)"]
+      "nnn": [
+        "Period",
+        "Year",
+        "Month",
+        "Base Rent Collected ($)",
+        "Taxes Recovery ($)",
+        "CAM Recovery ($)",
+        "Insurance Recovery ($)",
+        "Management Fee Recovery ($)",
+        "Total Cash In ($)",
+        "Landlord OpEx ($)",
+        "Free Rent Concession ($)",
+        "TI Outlay ($)",
+        "Leasing Commission ($)",
+        "Net Cash To Landlord ($)",
+        "Unrecovered OpEx ($)"
+      ],
+      "mg_stop": [
+        "Period",
+        "Year",
+        "Month",
+        "Base Rent Collected ($)",
+        "Taxes Recovery (Over Base) ($)",
+        "CAM Recovery (Over Base) ($)",
+        "Insurance Recovery (Over Base) ($)",
+        "Management Fee Recovery (Over Base) ($)",
+        "Total Cash In ($)",
+        "Landlord OpEx ($)",
+        "Free Rent Concession ($)",
+        "TI Outlay ($)",
+        "Leasing Commission ($)",
+        "Net Cash To Landlord ($)",
+        "Unrecovered OpEx ($)"
+      ],
+      "gross": [
+        "Period",
+        "Year",
+        "Month",
+        "Base Rent Collected ($)",
+        "Total Cash In ($)",
+        "Landlord OpEx ($)",
+        "Free Rent Concession ($)",
+        "TI Outlay ($)",
+        "Leasing Commission ($)",
+        "Net Cash To Landlord ($)",
+        "Unrecovered OpEx ($)"
+      ],
+      "custom": [
+        "Period",
+        "Year",
+        "Month",
+        "Base Rent Collected ($)",
+        "Taxes Recovery ($)",
+        "Insurance Recovery (Over Base) ($)",
+        "Management Fee Recovery ($)",
+        "Security Recovery ($)",
+        "Total Cash In ($)",
+        "Landlord OpEx ($)",
+        "Free Rent Concession ($)",
+        "TI Outlay ($)",
+        "Leasing Commission ($)",
+        "Net Cash To Landlord ($)",
+        "Unrecovered OpEx ($)"
+      ]
     }
   },
   "mgStopBaseControlsVisible": true
