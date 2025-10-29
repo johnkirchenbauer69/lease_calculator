@@ -540,14 +540,26 @@
     </div>
     <small class="hint">Applied to monthly rent before the fee itself.</small>
   </div>
+
+  <div class="field col-1-2">
+    <label for="mgmtMode">Responsibility</label>
+    <select id="mgmtMode" class="select-filled">
+      <option value="tenant">Tenant pays 100%</option>
+      <option value="stop">Base-year stop (increases only)</option>
+      <option value="landlord">Landlord pays 100%</option>
+    </select>
+    <small class="hint">Controls who bears the management fee each period.</small>
+  </div>
 </div>
 
-
-  <!-- right column kept for grid symmetry (empty like others) -->
-  <div class="field col-3-4">
-    <label class="right">&nbsp;</label>
-    <div class="input-with-addon"></div>
+<div class="field col-1-2" id="mgmtBaseWrap" style="display:none;">
+  <label for="mgmtBase">Management Fee Base-year ($/SF/yr)</label>
+  <div class="input-with-addon">
+    <span class="addon">$</span>
+    <input id="mgmtBase" type="text" inputmode="decimal" data-format="money" placeholder="leave blank to auto" />
+    <span class="addon">/SF/yr</span>
   </div>
+  <small class="hint">If blank, we’ll auto-set to the first full lease year.</small>
 </div>
 
   <!-- Advanced row -->
@@ -602,7 +614,7 @@
 </div>
 
 
-<section id="customExpSection" class="opx-group col-span-4 hidden" aria-label="Custom expenses">
+<section id="customExpSection" class="opx-group col-span-4" aria-label="Custom expenses">
   <div class="opx-head">
     <h4>Additional Operating Expenses</h4>
     <button id="addCustomExp" type="button" class="btn small">+ Add expense</button>
