@@ -128,9 +128,6 @@
       const baseInput = toNum(row.querySelector('.cx-base'));
       const base = (mode === 'stop' && baseInput > 0) ? baseInput : null; // optional, only for stop
 
-      // If stop mode and base is blank, default to Year-1 value
-      if (mode === 'stop' && !base) base = rate;
-
       return { id, label, rate, growth, unit, mode, base };
     }).filter(r => r.rate > 0);
   }
@@ -181,6 +178,7 @@
   const customSection = document.getElementById('customExpSection');
   const mgmtModeSelect = document.getElementById('mgmtMode');
   const mgmtBaseWrap = document.getElementById('mgmtBaseWrap');
+  const customList = document.getElementById('customExpList');
 
   function defaultOpExModeForService(type) {
     switch ((type || '').toLowerCase()) {
@@ -265,7 +263,6 @@
   }
 
   // ---------- custom row add/remove/label flipping
-  const customList = document.getElementById('customExpList');
   const rowTpl = document.getElementById('tplCustomExpRow');
   let customRowSeq = 0;
 
