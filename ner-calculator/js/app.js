@@ -50,10 +50,19 @@
    */
   function includeOpExInGross(perspective, serviceType) {
     const view = (perspective || '').toString().toLowerCase();
-    const type = (serviceType || '').toString().toLowerCase();
-    const isNNN = type.includes('nnn') || type.includes('triple');
-    if (view === 'landlord' && isNNN) return false;
-    return true;
+    const t = (serviceType || '').toString().toLowerCase();
+
+    const isNNNish = t.includes('nnn') || t.includes('triple');
+    const isMGStop = t.includes('mg') && t.includes('stop');
+    const isGross = t === 'gross' || t.includes('full service');
+    const isCustom = t === 'custom';
+
+    if (view === 'landlord' && (isNNNish || isMGStop || isGross || isCustom)) {
+      // Landlord gross excludes pass-through recoveries for these structures.
+      return false;
+    }
+    if (view === 'tenant') return true;
+    return false;
   }
 
   // -- Commissions & NPV chip (define once, top-level) -------------------------
@@ -2370,11 +2379,17 @@
     const scheduleRaw = Array.isArray(model?.schedule) ? model.schedule : [];
     const hasOther = !!model?.hasOtherOpEx;
 
-    const taxTag = hdrBadge(payerLabel(scheduleRaw, 'taxes'));
-    const camTag = hdrBadge(payerLabel(scheduleRaw, 'cam'));
-    const insTag = hdrBadge(payerLabel(scheduleRaw, 'ins'));
-    const mgmTag = hdrBadge(payerLabel(scheduleRaw, 'mgmt'));
-    const othTag = hasOther ? hdrBadge(payerLabel(scheduleRaw, 'other')) : '';
+    const isTenantView = (perspective || '').toLowerCase() === 'tenant';
+    const labelForTenant = (txt) => {
+      if (!isTenantView) return txt;
+      return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
+    };
+
+    const taxTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'taxes')));
+    const camTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'cam')));
+    const insTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'ins')));
+    const mgmTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'mgmt')));
+    const othTag = hasOther ? hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'other'))) : '';
 
     const otherLabelBase = 'Other OpEx ($/SF/yr)';
 
@@ -2534,12 +2549,18 @@ function renderAnnual(data, table, thead, tbody) {
   const hasMgmt  = (data.mgmt?.ratePct || 0) > 0;
   const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
 
+  const isTenantView = (activePerspective || '').toLowerCase() === 'tenant';
+  const labelForTenant = (txt) => {
+    if (!isTenantView) return txt;
+    return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
+  };
+
   // Tags aggregated across the whole schedule
-  const taxTag   = hdrBadge(payerLabel(data.schedule, 'taxes'));
-  const camTag   = hdrBadge(payerLabel(data.schedule, 'cam'));
-  const insTag   = hdrBadge(payerLabel(data.schedule, 'ins'));
-  const othTag   = hasOther ? hdrBadge(payerLabel(data.schedule, 'other')) : '';
-  const mgmtTag  = hasMgmt  ? hdrBadge(payerLabel(data.schedule, 'mgmt'))  : '';
+  const taxTag   = hdrBadge(labelForTenant(payerLabel(data.schedule, 'taxes')));
+  const camTag   = hdrBadge(labelForTenant(payerLabel(data.schedule, 'cam')));
+  const insTag   = hdrBadge(labelForTenant(payerLabel(data.schedule, 'ins')));
+  const othTag   = hasOther ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'other'))) : '';
+  const mgmtTag  = hasMgmt  ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'mgmt')))  : '';
 
   thead.innerHTML = `<tr>
     <th>Period</th>
@@ -2656,12 +2677,18 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   const hasMgmt  = (data.mgmt?.ratePct || 0) > 0;
   const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
 
+  const isTenantView = (activePerspective || '').toLowerCase() === 'tenant';
+  const labelForTenant = (txt) => {
+    if (!isTenantView) return txt;
+    return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
+  };
+
   // Dynamic payer badges under each OpEx header
-  const taxTag = hdrBadge(payerLabel(data.schedule, 'taxes'));
-  const camTag = hdrBadge(payerLabel(data.schedule, 'cam'));
-  const insTag = hdrBadge(payerLabel(data.schedule, 'ins'));
-  const othTag = hasOther ? hdrBadge(payerLabel(data.schedule, 'other')) : '';
-  const mgmTag = hasMgmt  ? hdrBadge(payerLabel(data.schedule, 'mgmt'))  : '';
+  const taxTag = hdrBadge(labelForTenant(payerLabel(data.schedule, 'taxes')));
+  const camTag = hdrBadge(labelForTenant(payerLabel(data.schedule, 'cam')));
+  const insTag = hdrBadge(labelForTenant(payerLabel(data.schedule, 'ins')));
+  const othTag = hasOther ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'other'))) : '';
+  const mgmTag = hasMgmt  ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'mgmt')))  : '';
 
   thead.innerHTML = `<tr>
     <th>Period</th>
