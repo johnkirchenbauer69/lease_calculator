@@ -149,7 +149,12 @@ function buildMiniTableHTML(model) {
   t.taxesT   += (Number.isFinite(+r.tenantTaxes$) ? +r.tenantTaxes$ : clampT(+r.taxesPSF   || 0));
   t.camT     += (Number.isFinite(+r.tenantCam$)   ? +r.tenantCam$   : clampT(+r.camPSF     || 0));
   t.insT     += (Number.isFinite(+r.tenantIns$)   ? +r.tenantIns$   : clampT(+r.insPSF     || 0));
-  t.otherT   += (Number.isFinite(+r.tenantOther$) ? +r.tenantOther$ : (r.isGrossAbated ? 0 : ((+r.otherPSF || 0) * area * cf)));
+  const otherTenantMo$ = Number.isFinite(+r.otherMonthly$Tenant)
+    ? +r.otherMonthly$Tenant
+    : ((r.tenPSF && Number.isFinite(+r.tenPSF.other)) ? ((+r.tenPSF.other || 0) / 12) * area * cf : 0);
+  t.otherT   += (Number.isFinite(+r.tenantOther$)
+    ? +r.tenantOther$
+    : (r.isGrossAbated ? 0 : otherTenantMo$));
   // Management Fee dollars — prefer explicit dollars if present; else PSF path
   t.mgmtT  += (+r.tenantMgmt$ || clampT(+r.mgmtPSF || 0));
   t.mgmtLL += (+r.llMgmt$     || 0);
