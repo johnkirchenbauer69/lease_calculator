@@ -317,6 +317,8 @@
 
     node.dataset.autoMode = prefill.mode ? '0' : '1';
 
+    node.dataset.autoMode = prefill.mode ? '0' : '1';
+
     // if stop, show base + year-1 kicker
     updateCustomRowModeUI(node);
     customList.appendChild(node);
