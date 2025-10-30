@@ -42,26 +42,11 @@
 
   function fmtPSF(v) { return (isFinite(v) ? `$${v.toFixed(2)}/SF` : '$0.00/SF'); }
 
-  /**
-   * Determine whether OpEx dollars should contribute to the displayed “gross”
-   * totals for a given perspective/service-type pairing. Landlord-facing NNN
-   * (including Absolute/Triple Net variants) treats pass-through OpEx as
-   * neutral, so gross should equal base rent in that case.
-   */
+  // LL Gross excludes pass-through recoveries across all service types.
   function includeOpExInGross(perspective, serviceType) {
     const view = (perspective || '').toString().toLowerCase();
-    const t = (serviceType || '').toString().toLowerCase();
-
-    const isNNNish = t.includes('nnn') || t.includes('triple');
-    const isMGStop = t.includes('mg') && t.includes('stop');
-    const isGross = t === 'gross' || t.includes('full service');
-    const isCustom = t === 'custom';
-
-    if (view === 'landlord' && (isNNNish || isMGStop || isGross || isCustom)) {
-      // Landlord gross excludes pass-through recoveries for these structures.
-      return false;
-    }
     if (view === 'tenant') return true;
+    if (view === 'landlord') return false;
     return false;
   }
 
@@ -150,8 +135,12 @@
       const mode = (row.querySelector('.cx-mode')?.value || 'tenant').toLowerCase(); // tenant|stop|landlord
       const baseInput = toNum(row.querySelector('.cx-base'));
       const base = (mode === 'stop' && baseInput > 0) ? baseInput : null; // optional, only for stop
+      const stopTypeSel = row.querySelector('.cx-stopType');
+      const stopType = (stopTypeSel?.value || 'base').toLowerCase();
+      const stopPSFInput = toNum(row.querySelector('.cx-stopPSF'));
+      const fixedStop = (mode === 'stop' && stopType === 'fixed' && stopPSFInput > 0) ? stopPSFInput : null;
 
-      return { id, label, rate, growth, unit, mode, base };
+      return { id, label, rate, growth, unit, mode, base, stopType, fixedStop };
     }).filter(r => r.rate > 0);
   }
 
@@ -207,8 +196,18 @@
     switch ((type || '').toLowerCase()) {
       case 'gross':
         return 'landlord';
-      case 'mg_stop':
+      case 'mg':
         return 'stop';
+      default:
+        return 'tenant';
+    }
+  }
+
+  function defaultMgmtModeForService(type) {
+    switch ((type || '').toLowerCase()) {
+      case 'gross':
+      case 'mg':
+        return 'landlord';
       default:
         return 'tenant';
     }
@@ -230,6 +229,10 @@
       const sel = row.querySelector('.cx-mode');
       if (!sel) return;
       if (desired) sel.value = desired;
+      if (desired === 'stop') {
+        const stopSel = row.querySelector('.cx-stopType');
+        if (stopSel) stopSel.value = 'base';
+      }
       row.dataset.autoMode = '1';
       updateCustomRowModeUI(row);
     });
@@ -241,7 +244,7 @@
     if (mgmtModeSelect) {
       mgmtModeSelect.dataset.auto = (type === 'custom') ? '0' : '1';
       if (type !== 'custom') {
-        const def = defaultOpExModeForService(type);
+        const def = defaultMgmtModeForService(type);
         if (def) mgmtModeSelect.value = def;
       }
       syncMgmtModeUI();
@@ -274,9 +277,9 @@
   });
 
   // Show base-year policy only when that line is in stop mode
-  function syncBaseYearVisibility(prefix, isStop) {
+  function syncBaseYearVisibility(prefix, showBaseControls) {
     const group = document.querySelector(`.opx-adv[data-for="${prefix}"] [data-show-when-stop="true"]`);
-    if (group) group.style.display = isStop ? '' : 'none';
+    if (group) group.style.display = showBaseControls ? '' : 'none';
     const policy = document.getElementById(`${prefix}BasePolicy`);
     const year = document.getElementById(`${prefix}BaseYear`);
     if (policy && year) {
@@ -304,8 +307,15 @@
     node.querySelector('.cx-growth').value = (prefill.growth != null && prefill.growthUnit === 'pct')
       ? (prefill.growth * 100).toFixed(2) : (prefill.growth ?? '');
     node.querySelector('.cx-growthUnit').value = prefill.growthUnit ?? 'pct';
-    node.querySelector('.cx-mode').value = initialMode;
+    const modeSel = node.querySelector('.cx-mode');
+    if (modeSel) modeSel.value = initialMode;
     node.querySelector('.cx-base').value = prefill.base != null ? prefill.base : '';
+    const stopTypeSel = node.querySelector('.cx-stopType');
+    const stopPSFInput = node.querySelector('.cx-stopPSF');
+    if (stopTypeSel) stopTypeSel.value = prefill.stopType ?? 'base';
+    if (stopPSFInput) stopPSFInput.value = prefill.fixedStop != null ? prefill.fixedStop : '';
+
+    node.dataset.autoMode = prefill.mode ? '0' : '1';
 
     node.dataset.autoMode = prefill.mode ? '0' : '1';
 
@@ -318,9 +328,18 @@
     const modeSel = rowEl.querySelector('.cx-mode');
     const baseWrap = rowEl.querySelector('.cx-base-wrap');
     const kicker = rowEl.querySelector('.cx-kicker');
+    const stopTypeWrap = rowEl.querySelector('[data-stop-type]');
+    const stopTypeSel = rowEl.querySelector('.cx-stopType');
+    const stopPSFWrap = rowEl.querySelector('.cx-stopPSF-wrap');
     const isStop = modeSel?.value === 'stop';
-    if (baseWrap) baseWrap.style.display = isStop ? '' : 'none';
-    if (kicker) kicker.hidden = !isStop;
+    const stopTypeVal = (stopTypeSel?.value || 'base').toLowerCase();
+    const showFixed = isStop && stopTypeVal === 'fixed';
+
+    if (stopTypeWrap) stopTypeWrap.style.display = isStop ? '' : 'none';
+    if (stopTypeSel) stopTypeSel.style.display = isStop ? '' : 'none';
+    if (baseWrap) baseWrap.style.display = (isStop && !showFixed) ? '' : 'none';
+    if (stopPSFWrap) stopPSFWrap.style.display = showFixed ? '' : 'none';
+    if (kicker) kicker.hidden = !(isStop && !showFixed);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -604,6 +623,8 @@
       const gRaw = row.querySelector('.cx-growth')?.value;
       const growth = gUnit === 'pct' ? percent(gRaw) : money(gRaw);
       const mode = row.querySelector('.cx-mode')?.value || 'tenant';
+      const stopType = row.querySelector('.cx-stopType')?.value || 'base';
+      const stopPSF = money(row.querySelector('.cx-stopPSF')?.value);
       const base = money(row.querySelector('.cx-base')?.value);
 
       rows.push({
@@ -612,7 +633,9 @@
         growth,
         growthUnit: gUnit,    // 'pct' | 'flat'
         mode,                 // 'tenant' | 'stop' | 'landlord'
-        base: Number.isFinite(base) && base > 0 ? base : null
+        base: Number.isFinite(base) && base > 0 ? base : null,
+        stopType,
+        fixedStop: (mode === 'stop' && stopType === 'fixed' && Number.isFinite(stopPSF) && stopPSF > 0) ? stopPSF : null
       });
     });
     return rows;
@@ -884,7 +907,7 @@
     const baseLblId = (kind === 'taxes') ? 'lblTaxesBase' : (kind === 'cam') ? 'lblCamBase' : 'lblInsBase';
 
     const svc = services.toLowerCase();
-    const isMG = (svc === 'mg' || svc === 'mg_stop');
+    const isMG = (svc === 'mg');
     const isCustom = /^custom$/i.test(services);
     const isBaseStop = (mode === 'stop');
 
@@ -892,25 +915,33 @@
     const modeWrap = document.querySelector(`.opx-mode[data-for="${kind}"]`);
     if (modeWrap) modeWrap.style.display = (isMG || isCustom) ? '' : 'none';
 
-    // Show Base-year override only when Pass-through Mode = stop (for MG **or** Custom)
+    const stopWrap = document.querySelector(`.opx-stop[data-for="${kind}"]`);
     const baseWrap = document.querySelector(`.opx-base[data-for="${kind}"]`);
-    if (baseWrap) baseWrap.style.display = (isBaseStop && (isMG || isCustom)) ? '' : 'none';
+    const stopPSFWrap = document.getElementById(`${kind}StopPSFWrap`);
+    const stopTypeSel = document.getElementById(`${kind}StopType`);
+    const stopType = (stopTypeSel?.value || 'base').toLowerCase();
+    const showStopControls = isBaseStop && (isMG || isCustom);
+    const showFixed = showStopControls && stopType === 'fixed';
 
-    // Keep the per-line base-year visibility in sync
-    syncBaseYearVisibility('taxes', document.getElementById('taxesMode')?.value === 'stop');
-    syncBaseYearVisibility('cam', document.getElementById('camMode')?.value === 'stop');
-    syncBaseYearVisibility('ins', document.getElementById('insMode')?.value === 'stop');
+    if (stopWrap) stopWrap.style.display = showStopControls ? '' : 'none';
+    if (baseWrap) baseWrap.style.display = (showStopControls && !showFixed) ? '' : 'none';
+    if (stopPSFWrap) stopPSFWrap.style.display = showFixed ? '' : 'none';
+
+    // Keep the per-line base-year visibility in sync (only when base-year stop applies)
+    syncBaseYearVisibility(kind, showStopControls && !showFixed);
 
     // Kicker “(Year 1 …)” only when base-year stop is active (MG or Custom)
     const kicker = document.getElementById(kickerId);
-    if (kicker) kicker.hidden = !isBaseStop;
+    if (kicker) kicker.hidden = !(isBaseStop && !showFixed);
 
     // Hint text aligns with whether we’re in a base-year stop flow
     const hint = document.getElementById(hintId);
     if (hint) {
-      hint.textContent = isBaseStop
-        ? 'Enter the Year-1 value that will escalate by the annual rate above.'
-        : 'Enter the current value that will escalate by the annual rate above.';
+      hint.textContent = showFixed
+        ? 'Tenant pays only the portion above the fixed stop entered below.'
+        : (isBaseStop
+          ? 'Enter the Year-1 value that will escalate by the annual rate above.'
+          : 'Enter the current value that will escalate by the annual rate above.');
     }
 
     // Base label stays the same
@@ -928,6 +959,7 @@
 
     serviceSel?.addEventListener('change', () => {
       updateOpexLabels('taxes'); updateOpexLabels('cam'); updateOpexLabels('ins');
+      calculate();
     });
 
     modeIds.forEach(id => {
@@ -935,7 +967,28 @@
         if (id === 'taxesMode') updateOpexLabels('taxes');
         if (id === 'camMode') updateOpexLabels('cam');
         if (id === 'insMode') updateOpexLabels('ins');
+        calculate();
       });
+    });
+
+    [
+      ['taxesStopType', 'taxes'],
+      ['camStopType', 'cam'],
+      ['insStopType', 'ins']
+    ].forEach(([id, kind]) => {
+      const sel = document.getElementById(id);
+      if (sel) {
+        sel.addEventListener('change', () => {
+          updateOpexLabels(kind);
+          calculate();
+        });
+      }
+    });
+
+    ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(id => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
     });
 
     // initial
@@ -1097,10 +1150,17 @@
       } else if (v === 'gross') {
         // Gross: landlord pays all; lock switches
         setAll(false, true);
-      } else if (v === 'mg_stop') {
+      } else if (v === 'mg') {
         // Base-year stop across the 3 core lines
         setAll(false, true);
         show('.opx-base', true);
+        show('.opx-mode', true);
+        ['taxes', 'cam', 'ins'].forEach(line => {
+          const sel = q(`#${line}Mode`);
+          if (sel) sel.value = 'stop';
+          const stopSel = q(`#${line}StopType`);
+          if (stopSel) stopSel.value = 'base';
+        });
       } else if (v === 'custom') {
         // Universal “Custom” mode
         [incTaxes, incCam, incIns].forEach(cb => cb && (cb.disabled = true));
@@ -1109,6 +1169,10 @@
         // Fallback
         [incTaxes, incCam, incIns].forEach(cb => cb && (cb.disabled = false));
       }
+
+      updateOpexLabels('taxes');
+      updateOpexLabels('cam');
+      updateOpexLabels('ins');
     }
     serviceType?.addEventListener('change', syncIncludes);
     syncIncludes();
@@ -1122,13 +1186,17 @@
       btn.closest('.cx-row')?.remove();
     });
     customList?.addEventListener('change', (e) => {
-      const sel = e.target.closest('.cx-mode');
-      if (!sel) return;
-      const row = sel.closest('.cx-row');
-      if (row) {
+      const modeSel = e.target.closest('.cx-mode');
+      const row = e.target.closest('.cx-row');
+      if (!row) return;
+      if (modeSel) {
         row.dataset.autoMode = '0';
-        updateCustomRowModeUI(row);
       }
+      updateCustomRowModeUI(row);
+      calculate();
+    });
+    customList?.addEventListener('input', (e) => {
+      if (e.target.closest('.cx-row')) calculate();
     });
     addBtn?.addEventListener('click', () => addCustomRow());
 
@@ -1137,13 +1205,17 @@
       if (!customList) return [];
       const rows = [];
       qa('.cx-row', customList).forEach(row => {
+        const mode = q('.cx-mode', row)?.value || 'tenant';
+        const stopType = q('.cx-stopType', row)?.value || 'base';
         rows.push({
           label: (q('.cx-label', row)?.value || 'Expense').trim(),
           value: q('.cx-val', row)?.value ?? '',          // $/SF/yr (Y1)
           growth: q('.cx-growth', row)?.value ?? '',      // raw value; parse by unit
           growthUnit: q('.cx-growthUnit', row)?.value || 'pct', // 'pct' | 'flat'
-          mode: q('.cx-mode', row)?.value || 'tenant',    // 'tenant' | 'stop' | 'landlord'
-          base: q('.cx-base', row)?.value ?? ''           // $/SF/yr; blank = auto Y1
+          mode,
+          base: q('.cx-base', row)?.value ?? '',           // $/SF/yr; blank = auto Y1
+          stopType,
+          fixedStop: (mode === 'stop' && stopType === 'fixed') ? (q('.cx-stopPSF', row)?.value ?? '') : ''
         });
       });
       return rows;
@@ -1298,13 +1370,13 @@
       const tiPerSF_forDisplay = area ? (llAllowanceApplied / area) : 0;
 
       // Services + OpEx + growth
-      const type = $('#serviceType')?.value || 'nnn'; // 'nnn' | 'gross' | 'mg_stop' | 'custom'
+      const type = $('#serviceType')?.value || 'nnn'; // 'nnn' | 'gross' | 'mg' | 'custom'
       const taxes = rawNumberFromInput($('#taxes'));
       const cam = rawNumberFromInput($('#cam'));
       const ins = rawNumberFromInput($('#ins'));
       const mgmtRatePct = +document.getElementById('mgmtRate')?.value || 0; // e.g. 3.0
       const mgmtAppliedOn = document.getElementById('mgmtAppliedOn')?.value || 'gross';
-      const mgmtModeSelection = (document.getElementById('mgmtMode')?.value || defaultOpExModeForService(type)).toLowerCase();
+      const mgmtModeSelection = (document.getElementById('mgmtMode')?.value || defaultMgmtModeForService(type)).toLowerCase();
       const mgmtBaseAnnInput = rawNumberFromInput($('#mgmtBase'));
       const mgmtCfg = {
         ratePct: mgmtRatePct,
@@ -1339,6 +1411,12 @@
       const taxesBaseAnn = rawNumberFromInput($('#taxesBase')); // $/SF/yr or blank for auto
       const camBaseAnn = rawNumberFromInput($('#camBase'));
       const insBaseAnn = rawNumberFromInput($('#insBase'));
+      const taxesStopType = ($('#taxesStopType')?.value || 'base').toLowerCase();
+      const camStopType = ($('#camStopType')?.value || 'base').toLowerCase();
+      const insStopType = ($('#insStopType')?.value || 'base').toLowerCase();
+      const taxesFixedStop = rawNumberFromInput($('#taxesStopPSF'));
+      const camFixedStop = rawNumberFromInput($('#camStopPSF'));
+      const insFixedStop = rawNumberFromInput($('#insStopPSF'));
 
       // Commission & discount
       const brokerCommPct = rawNumberFromInput($('#brokerCommission')) / 100;
@@ -1465,11 +1543,17 @@
       // Treat pass-through category → split tenant vs LL based on mode
       // mode: 'tenant' | 'landlord' | 'stop'
       // monthlyPSF = current monthly charge; baseAnnForStop = annual $/SF for base-year
-      function treatCategory(mode, monthlyPSF, baseAnnForStop) {
+      function treatCategory(mode, monthlyPSF, stopMeta) {
         if (mode === "tenant") return { tenantPSF: monthlyPSF, llPSF: 0 };
         if (mode === "landlord") return { tenantPSF: 0, llPSF: monthlyPSF };
-        // base-year stop → only increases above base are tenant
-        const incMonthly = Math.max(0, (monthlyPSF * 12) - baseAnnForStop) / 12;
+        const meta = (stopMeta && typeof stopMeta === 'object' && !Array.isArray(stopMeta))
+          ? stopMeta
+          : { type: 'base', baseAnnual: Number(stopMeta) || 0, fixedAnnual: 0 };
+        const type = (meta.type || 'base').toLowerCase();
+        const baseAnnual = Number(meta.baseAnnual) || 0;
+        const fixedAnnual = Number(meta.fixedAnnual) || 0;
+        const comparison = (type === 'fixed') ? fixedAnnual : baseAnnual;
+        const incMonthly = Math.max(0, (monthlyPSF * 12) - comparison) / 12;
         return { tenantPSF: incMonthly, llPSF: monthlyPSF };
       }
 
@@ -1482,9 +1566,31 @@
   
 
       // Precompute annual base amounts when a line is in "base-year stop" mode.
-      const taxesStopBaseAnn = taxesBaseAnn || autoBaseForStop(taxes, taxesGrowthUnit, taxesGrowthPct, taxesGrowthFlat);
-      const camStopBaseAnn = camBaseAnn || autoBaseForStop(cam, camGrowthUnit, camGrowthPct, camGrowthFlat);
-      const insStopBaseAnn = insBaseAnn || autoBaseForStop(ins, insGrowthUnit, insGrowthPct, insGrowthFlat);
+      const taxesStopBaseAnn = (taxesStopType === 'fixed')
+        ? 0
+        : (taxesBaseAnn || autoBaseForStop(taxes, taxesGrowthUnit, taxesGrowthPct, taxesGrowthFlat));
+      const camStopBaseAnn = (camStopType === 'fixed')
+        ? 0
+        : (camBaseAnn || autoBaseForStop(cam, camGrowthUnit, camGrowthPct, camGrowthFlat));
+      const insStopBaseAnn = (insStopType === 'fixed')
+        ? 0
+        : (insBaseAnn || autoBaseForStop(ins, insGrowthUnit, insGrowthPct, insGrowthFlat));
+
+      const taxesStopMeta = {
+        type: taxesStopType,
+        baseAnnual: taxesStopBaseAnn,
+        fixedAnnual: (taxesStopType === 'fixed') ? taxesFixedStop : 0
+      };
+      const camStopMeta = {
+        type: camStopType,
+        baseAnnual: camStopBaseAnn,
+        fixedAnnual: (camStopType === 'fixed') ? camFixedStop : 0
+      };
+      const insStopMeta = {
+        type: insStopType,
+        baseAnnual: insStopBaseAnn,
+        fixedAnnual: (insStopType === 'fixed') ? insFixedStop : 0
+      };
 
       // -----------------------------------------------------------------------
       // Build the schedule (per-month rows)
@@ -1527,7 +1633,7 @@
         }
       };
 
-      const mgmtMode = (mgmtCfg.mode || defaultOpExModeForService(type)).toLowerCase();
+      const mgmtMode = (mgmtCfg.mode || defaultMgmtModeForService(type)).toLowerCase();
       const mgmtRateDecimal = Math.max(0, mgmtCfg.ratePct || 0) / 100;
       const autoMgmtBaseAnn = (mgmtRateDecimal > 0)
         ? baseAnnualPSFForIndex(startDate.getMonth() > 0 ? 1 : 0) * mgmtRateDecimal
@@ -1554,15 +1660,23 @@
           const gFlat = (x.unit === 'flat') ? x.growth : 0;
           const otherAnnPSF = growOpEx(x.rate, x.unit, gPct, gFlat, opxYearIndex);
           const otherMoPSF = otherAnnPSF / 12;
-          const stopBaseAnn = (mode === 'stop')
+          const stopType = (x.stopType || 'base').toLowerCase();
+          const stopBaseAnn = (mode === 'stop' && stopType !== 'fixed')
             ? (x.base != null ? x.base : autoBaseForStop(x.rate, x.unit, gPct, gFlat))
             : 0;
-          const share = treatCategory(mode === 'stop' ? 'stop' : mode, otherMoPSF, stopBaseAnn);
+          const stopMeta = {
+            type: stopType,
+            baseAnnual: stopBaseAnn,
+            fixedAnnual: (mode === 'stop' && stopType === 'fixed' && x.fixedStop != null) ? x.fixedStop : 0
+          };
+          const share = treatCategory(mode === 'stop' ? 'stop' : mode, otherMoPSF, stopMeta);
           return {
             id: x.id || `custom-${idx + 1}`,
             label: x.label || `Custom ${idx + 1}`,
             mode,
-            baseAnnual: (mode === 'stop') ? stopBaseAnn : null,
+            baseAnnual: (mode === 'stop' && stopType !== 'fixed') ? stopBaseAnn : null,
+            fixedStop: (mode === 'stop' && stopType === 'fixed' && x.fixedStop != null) ? x.fixedStop : null,
+            stopType,
             tenantMonthlyPSF: share.tenantPSF,
             landlordMonthlyPSF: share.llPSF,
             tenantAnnualPSF: share.tenantPSF * 12,
@@ -1598,17 +1712,17 @@
         } else if (type === "gross") {
           llTxMo = txMo; llCamMo = camMo; llInsMo = insMo;
           llOpexPSF = txMo + camMo + insMo;
-        } else if (type === "mg_stop") {
-          const t = treatCategory('stop', txMo, taxesStopBaseAnn);
-          const c = treatCategory('stop', camMo, camStopBaseAnn);
-          const i = treatCategory('stop', insMo, insStopBaseAnn);
+        } else if (type === "mg") {
+          const t = treatCategory('stop', txMo, taxesStopMeta);
+          const c = treatCategory('stop', camMo, camStopMeta);
+          const i = treatCategory('stop', insMo, insStopMeta);
           tenTxMo = t.tenantPSF; tenCamMo = c.tenantPSF; tenInsMo = i.tenantPSF;
           llTxMo = t.llPSF; llCamMo = c.llPSF; llInsMo = i.llPSF;
           llOpexPSF = llTxMo + llCamMo + llInsMo;
         } else if (type === "custom") {
-          const t = (taxesMode === 'stop') ? treatCategory('stop', txMo, taxesStopBaseAnn) : treatCategory(taxesMode, txMo, taxesStopBaseAnn);
-          const c = (camMode === 'stop') ? treatCategory('stop', camMo, camStopBaseAnn) : treatCategory(camMode, camMo, camStopBaseAnn);
-          const i = (insMode === 'stop') ? treatCategory('stop', insMo, insStopBaseAnn) : treatCategory(insMode, insMo, insStopBaseAnn);
+          const t = (taxesMode === 'stop') ? treatCategory('stop', txMo, taxesStopMeta) : treatCategory(taxesMode, txMo, taxesStopMeta);
+          const c = (camMode === 'stop') ? treatCategory('stop', camMo, camStopMeta) : treatCategory(camMode, camMo, camStopMeta);
+          const i = (insMode === 'stop') ? treatCategory('stop', insMo, insStopMeta) : treatCategory(insMode, insMo, insStopMeta);
           tenTxMo = t.tenantPSF; tenCamMo = c.tenantPSF; tenInsMo = i.tenantPSF;
           llTxMo = t.llPSF; llCamMo = c.llPSF; llInsMo = i.llPSF;
           llOpexPSF = llTxMo + llCamMo + llInsMo;
@@ -1704,8 +1818,8 @@
           mgmtFee$ = appliedBase * mgmtRateDecimal;
           const mgmtMoPSF = (area && cashFactor) ? (mgmtFee$ / (area * cashFactor)) : 0;
 
-          const baseForStop = (mgmtMode === 'stop') ? mgmtStopBaseAnn : 0;
-          const share = treatCategory(mgmtMode === 'stop' ? 'stop' : mgmtMode, mgmtMoPSF, baseForStop);
+          const mgmtStopMeta = { type: 'base', baseAnnual: mgmtStopBaseAnn, fixedAnnual: 0 };
+          const share = treatCategory(mgmtMode === 'stop' ? 'stop' : mgmtMode, mgmtMoPSF, mgmtStopMeta);
           tenantMgmtMoPSFShare = share.tenantPSF;
           llMgmtMoPSFShare = share.llPSF;
 
@@ -2019,9 +2133,9 @@
       // -----------------------------------------------------------------------
       // Build “model” and publish for charts/scenarios
       // -----------------------------------------------------------------------
-      const taxesModeForModel = (type === 'custom') ? taxesMode : (type === 'gross' ? 'landlord' : (type === 'mg_stop' ? 'stop' : 'tenant'));
-      const camModeForModel = (type === 'custom') ? camMode : (type === 'gross' ? 'landlord' : (type === 'mg_stop' ? 'stop' : 'tenant'));
-      const insModeForModel = (type === 'custom') ? insMode : (type === 'gross' ? 'landlord' : (type === 'mg_stop' ? 'stop' : 'tenant'));
+      const taxesModeForModel = (type === 'custom') ? taxesMode : (type === 'gross' ? 'landlord' : (type === 'mg' ? 'stop' : 'tenant'));
+      const camModeForModel = (type === 'custom') ? camMode : (type === 'gross' ? 'landlord' : (type === 'mg' ? 'stop' : 'tenant'));
+      const insModeForModel = (type === 'custom') ? insMode : (type === 'gross' ? 'landlord' : (type === 'mg' ? 'stop' : 'tenant'));
       const mgmtModeForModel = mgmtMode;
 
       const model = {
@@ -2048,6 +2162,12 @@
           cam: camModeForModel,
           ins: insModeForModel,
           mgmt: mgmtModeForModel
+        },
+        coreOpExStopTypes: {
+          taxes: taxesStopType,
+          cam: camStopType,
+          ins: insStopType,
+          mgmt: 'base'
         },
 
         photoDataURL: window.__ner_photo || (localStorage.getItem('ner.photo') || null),
@@ -2260,7 +2380,9 @@
           mode: item.mode || 'tenant',
           total: tenant$,
           landlordPortion: landlord$,
-          baseAnnual: item.baseAnnual ?? null
+          baseAnnual: item.baseAnnual ?? null,
+          stopType: item.stopType || null,
+          fixedStop: item.fixedStop ?? null
         };
         customRecovery += tenant$;
         customLandlordBurden += landlord$;
@@ -2375,7 +2497,9 @@
 
     const serviceType = (model?.serviceType || '').toLowerCase();
     const coreModes = model?.coreOpExModes || {};
+    const coreStopTypes = model?.coreOpExStopTypes || {};
     const normalizeMode = (mode) => (mode || '').toLowerCase();
+    const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
     const scheduleRaw = Array.isArray(model?.schedule) ? model.schedule : [];
     const hasOther = !!model?.hasOtherOpEx;
 
@@ -2419,20 +2543,20 @@
     };
 
     if (showTaxesTenant) {
-      const label = (serviceType === 'mg_stop' || normalizeMode(coreModes.taxes) === 'stop')
-        ? 'Taxes Over Base ($/SF/yr)'
+      const label = (serviceType === 'mg' || normalizeMode(coreModes.taxes) === 'stop')
+        ? (stopTypeFor('taxes') === 'fixed' ? 'Taxes Over Fixed Stop ($/SF/yr)' : 'Taxes Over Base ($/SF/yr)')
         : 'Taxes ($/SF/yr)';
       pushTenantCol({ key: 'taxesPSF', label, badge: taxTag });
     }
     if (showCamTenant) {
-      const label = (serviceType === 'mg_stop' || normalizeMode(coreModes.cam) === 'stop')
-        ? 'CAM Over Base ($/SF/yr)'
+      const label = (serviceType === 'mg' || normalizeMode(coreModes.cam) === 'stop')
+        ? (stopTypeFor('cam') === 'fixed' ? 'CAM Over Fixed Stop ($/SF/yr)' : 'CAM Over Base ($/SF/yr)')
         : 'CAM ($/SF/yr)';
       pushTenantCol({ key: 'camPSF', label, badge: camTag });
     }
     if (showInsTenant) {
-      const label = (serviceType === 'mg_stop' || normalizeMode(coreModes.ins) === 'stop')
-        ? 'Insurance Over Base ($/SF/yr)'
+      const label = (serviceType === 'mg' || normalizeMode(coreModes.ins) === 'stop')
+        ? (stopTypeFor('ins') === 'fixed' ? 'Insurance Over Fixed Stop ($/SF/yr)' : 'Insurance Over Base ($/SF/yr)')
         : 'Insurance ($/SF/yr)';
       pushTenantCol({ key: 'insPSF', label, badge: insTag });
     }
@@ -2550,6 +2674,18 @@ function renderAnnual(data, table, thead, tbody) {
   const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
 
   const isTenantView = (activePerspective || '').toLowerCase() === 'tenant';
+  const serviceType = (data.serviceType || '').toLowerCase();
+  const coreModes = data.coreOpExModes || {};
+  const coreStopTypes = data.coreOpExStopTypes || {};
+  const normalizeMode = (mode) => (mode || '').toLowerCase();
+  const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
+  const labelWithStop = (base, key) => {
+    const mode = normalizeMode(coreModes[key]);
+    const isStop = (serviceType === 'mg') || mode === 'stop';
+    if (!isStop) return `${base} ($/SF/yr)`;
+    const suffix = stopTypeFor(key) === 'fixed' ? 'Over Fixed Stop' : 'Over Base';
+    return `${base} ${suffix} ($/SF/yr)`;
+  };
   const labelForTenant = (txt) => {
     if (!isTenantView) return txt;
     return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
@@ -2562,17 +2698,25 @@ function renderAnnual(data, table, thead, tbody) {
   const othTag   = hasOther ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'other'))) : '';
   const mgmtTag  = hasMgmt  ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'mgmt')))  : '';
 
+  const taxesHeaderLabel = labelWithStop('Taxes', 'taxes');
+  const camHeaderLabel = labelWithStop('CAM', 'cam');
+  const insHeaderLabel = labelWithStop('Insurance', 'ins');
+  const mgmtBaseLabel = `Mgmt Fee (${data.mgmt?.appliedOn === 'net' ? 'on Net' : 'on Gross'})`;
+  const mgmtHeaderLabel = (normalizeMode(coreModes.mgmt) === 'stop')
+    ? `${mgmtBaseLabel} ${stopTypeFor('mgmt') === 'fixed' ? 'Over Fixed Stop' : 'Over Base'} ($/SF/yr)`
+    : `${mgmtBaseLabel} ($/SF/yr)`;
+
   thead.innerHTML = `<tr>
     <th>Period</th>
     <th>Year</th>
     <th>Months</th>
     <th>Space Size (SF)</th>
     <th>Net Rent ($/SF/yr)</th>
-    <th>Taxes ($/SF/yr)${taxTag}</th>
-    <th>CAM ($/SF/yr)${camTag}</th>
-    <th>Insurance ($/SF/yr)${insTag}</th>
+    <th>${taxesHeaderLabel}${taxTag}</th>
+    <th>${camHeaderLabel}${camTag}</th>
+    <th>${insHeaderLabel}${insTag}</th>
     ${hasOther ? `<th>Other ($/SF/yr)${othTag}</th>` : ''}
-    ${hasMgmt ? `<th>Mgmt Fee (${data.mgmt?.appliedOn === 'net' ? 'on Net' : 'on Gross'}) ($/SF/yr)${mgmtTag}</th>` : ''}
+    ${hasMgmt ? `<th>${mgmtHeaderLabel}${mgmtTag}</th>` : ''}
     <th>Gross Rent ($/SF/yr)</th>
     <th>Monthly Net Rent</th>
     <th>Total Net Rent</th>
@@ -2690,17 +2834,38 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   const othTag = hasOther ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'other'))) : '';
   const mgmTag = hasMgmt  ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'mgmt')))  : '';
 
+  const serviceType = (data.serviceType || '').toLowerCase();
+  const coreModes = data.coreOpExModes || {};
+  const coreStopTypes = data.coreOpExStopTypes || {};
+  const normalizeMode = (mode) => (mode || '').toLowerCase();
+  const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
+  const labelWithStop = (base, key) => {
+    const mode = normalizeMode(coreModes[key]);
+    const isStop = (serviceType === 'mg') || mode === 'stop';
+    if (!isStop) return `${base} ($/SF/yr)`;
+    const suffix = stopTypeFor(key) === 'fixed' ? 'Over Fixed Stop' : 'Over Base';
+    return `${base} ${suffix} ($/SF/yr)`;
+  };
+
+  const taxesHeaderLabel = labelWithStop('Taxes', 'taxes');
+  const camHeaderLabel = labelWithStop('CAM', 'cam');
+  const insHeaderLabel = labelWithStop('Insurance', 'ins');
+  const mgmtBaseLabel = `Mgmt Fee (${data.mgmt?.appliedOn === 'net' ? 'on Net' : 'on Gross'})`;
+  const mgmtHeaderLabel = (normalizeMode(coreModes.mgmt) === 'stop')
+    ? `${mgmtBaseLabel} ${stopTypeFor('mgmt') === 'fixed' ? 'Over Fixed Stop' : 'Over Base'} ($/SF/yr)`
+    : `${mgmtBaseLabel} ($/SF/yr)`;
+
   thead.innerHTML = `<tr>
     <th>Period</th>
     <th>Year</th>
     <th>Month</th>
     <th>Space Size (SF)</th>
     <th>Net Rent ($/SF/yr)</th>
-    <th>Taxes ($/SF/yr)${taxTag}</th>
-    <th>CAM ($/SF/yr)${camTag}</th>
-    <th>Insurance ($/SF/yr)${insTag}</th>
+    <th>${taxesHeaderLabel}${taxTag}</th>
+    <th>${camHeaderLabel}${camTag}</th>
+    <th>${insHeaderLabel}${insTag}</th>
     ${hasOther ? `<th>Other ($/SF/yr)${othTag}</th>` : ''}
-    ${hasMgmt  ? `<th>Mgmt Fee (${data.mgmt?.appliedOn === 'net' ? 'on Net' : 'on Gross'}) ($/SF/yr)${mgmTag}</th>` : ''}
+    ${hasMgmt  ? `<th>${mgmtHeaderLabel}${mgmTag}</th>` : ''}
     <th>Gross Rent ($/SF/yr)</th>
     <th>Net Rent (Total)</th>
     <th>Gross Rent (Total)</th>

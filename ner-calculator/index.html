@@ -234,7 +234,7 @@
   <label for="serviceType">Services</label>
   <select id="serviceType" class="select-filled">
     <option value="nnn" selected>NNN (Base + Taxes + CAM + Insurance)</option>
-    <option value="mg_stop">Modified Gross — Base-Year Stop</option>
+    <option value="mg">Modified Gross</option>
     <option value="gross">Gross (Base only)</option>
     <option value="custom">Custom</option>
   </select>
@@ -300,6 +300,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <!-- Advanced row (spans all 4 columns) -->
@@ -414,6 +429,21 @@
     </small>
   </div>
 
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Advanced row -->
   <div class="opx-adv col-1-4" data-for="cam" hidden>
     <div class="adv-grid">
@@ -524,6 +554,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="ins" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="insStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="insStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="insStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
 <!-- ========================== Management Fee ========================== -->
@@ -667,6 +712,23 @@
             <option value="stop">Base-year stop (increases only)</option>
             <option value="landlord">Landlord pays</option>
           </select>
+        </div>
+      </div>
+
+      <div class="field" style="display:none;" data-stop-type>
+        <label>Stop Type</label>
+        <select class="cx-stopType select-filled">
+          <option value="base" selected>Base-year</option>
+          <option value="fixed">Fixed stop</option>
+        </select>
+      </div>
+
+      <div class="field cx-stopPSF-wrap" style="display:none;">
+        <label>Fixed Stop ($/SF/yr)</label>
+        <div class="input-with-addon">
+          <span class="addon">$</span>
+          <input type="text" class="cx-stopPSF" inputmode="decimal" placeholder="0.00" />
+          <span class="addon">/SF/yr</span>
         </div>
       </div>
 
