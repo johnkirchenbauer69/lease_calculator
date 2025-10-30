@@ -462,29 +462,14 @@ window.addEventListener('load', initMap);
     document.getElementById('mgmtBase')
       ?.addEventListener('change', calculate);
   
-    function bindAdvPill(pillId, panelSelector) {
-      const pill = document.getElementById(pillId);
-      const panel = panelSelector ? document.querySelector(panelSelector) : null;
-      if (!pill) return;
-
-      function setState(on) {
-        pill.classList.toggle('is-on', on);
-        pill.setAttribute('aria-pressed', on ? 'true' : 'false');
-        if (panel) panel.hidden = !on;
-      }
-
-      if (panel) setState(!panel.hidden);
-
-      pill.addEventListener('click', () => {
-        const on = !(pill.getAttribute('aria-pressed') === 'true');
-        setState(on);
-      });
-    }
-
-    bindAdvPill('advTaxes', '#taxes-advanced');
-    bindAdvPill('advCam', '#cam-advanced');
-    bindAdvPill('advIns', '#ins-advanced');
-    bindAdvPill('advMgmt', null);
+    // Toggle "Advanced" panels
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-adv-toggle]');
+      if (!t) return;
+      const key = t.getAttribute('data-adv-toggle');
+      const panel = document.querySelector(`.opx-adv[data-for="${key}"]`);
+      if (panel) panel.hidden = !panel.hidden;
+    });
   
     // Show base-year policy only when that line is in stop mode
     function syncBaseYearVisibility(prefix, showBaseControls) {
