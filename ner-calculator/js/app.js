@@ -191,13 +191,23 @@
   const mgmtModeSelect = document.getElementById('mgmtMode');
   const mgmtBaseWrap = document.getElementById('mgmtBaseWrap');
   const customList = document.getElementById('customExpList');
+  const taxesModeSelect = document.getElementById('taxesMode');
+  const camModeSelect = document.getElementById('camMode');
+  const insModeSelect = document.getElementById('insMode');
+
+  function setAutoDefault(selectEl, value) {
+    if (!selectEl) return;
+    if (!selectEl.dataset.auto) selectEl.dataset.auto = '1';
+    if (selectEl.dataset.auto !== '0' && value != null) {
+      selectEl.value = value;
+    }
+  }
 
   function defaultOpExModeForService(type) {
     switch ((type || '').toLowerCase()) {
       case 'gross':
-        return 'landlord';
       case 'mg':
-        return 'stop';
+        return 'landlord';
       default:
         return 'tenant';
     }
@@ -220,7 +230,6 @@
   }
 
   function syncCustomRowModeDefaults(type) {
-    if ((type || '').toLowerCase() === 'custom') return;
     if (!customList) return;
     const desired = defaultOpExModeForService(type);
     customList.querySelectorAll('.cx-row').forEach(row => {
@@ -241,14 +250,17 @@
   function handleServiceTypeChange() {
     const type = (serviceTypeEl?.value || 'nnn').toLowerCase();
     customSection?.classList.remove('hidden');
-    if (mgmtModeSelect) {
-      mgmtModeSelect.dataset.auto = (type === 'custom') ? '0' : '1';
-      if (type !== 'custom') {
-        const def = defaultMgmtModeForService(type);
-        if (def) mgmtModeSelect.value = def;
-      }
-      syncMgmtModeUI();
-    }
+
+    setAutoDefault(mgmtModeSelect, defaultMgmtModeForService(type));
+    syncMgmtModeUI();
+
+    const desiredCoreMode = defaultOpExModeForService(type);
+    setAutoDefault(taxesModeSelect, desiredCoreMode);
+    setAutoDefault(camModeSelect, desiredCoreMode);
+    setAutoDefault(insModeSelect, desiredCoreMode);
+
+    ['taxes', 'cam', 'ins'].forEach(updateOpexLabels);
+
     syncCustomRowModeDefaults(type);
   }
 
@@ -314,8 +326,6 @@
     const stopPSFInput = node.querySelector('.cx-stopPSF');
     if (stopTypeSel) stopTypeSel.value = prefill.stopType ?? 'base';
     if (stopPSFInput) stopPSFInput.value = prefill.fixedStop != null ? prefill.fixedStop : '';
-
-    node.dataset.autoMode = prefill.mode ? '0' : '1';
 
     node.dataset.autoMode = prefill.mode ? '0' : '1';
 
@@ -908,19 +918,18 @@
 
     const svc = services.toLowerCase();
     const isMG = (svc === 'mg');
-    const isCustom = /^custom$/i.test(services);
     const isBaseStop = (mode === 'stop');
 
-    // Show Pass-through Mode for BOTH MG and Custom
+    // Show Pass-through Mode for MG leases
     const modeWrap = document.querySelector(`.opx-mode[data-for="${kind}"]`);
-    if (modeWrap) modeWrap.style.display = (isMG || isCustom) ? '' : 'none';
+    if (modeWrap) modeWrap.style.display = isMG ? '' : 'none';
 
     const stopWrap = document.querySelector(`.opx-stop[data-for="${kind}"]`);
     const baseWrap = document.querySelector(`.opx-base[data-for="${kind}"]`);
     const stopPSFWrap = document.getElementById(`${kind}StopPSFWrap`);
     const stopTypeSel = document.getElementById(`${kind}StopType`);
     const stopType = (stopTypeSel?.value || 'base').toLowerCase();
-    const showStopControls = isBaseStop && (isMG || isCustom);
+    const showStopControls = isBaseStop && isMG;
     const showFixed = showStopControls && stopType === 'fixed';
 
     if (stopWrap) stopWrap.style.display = showStopControls ? '' : 'none';
@@ -963,12 +972,36 @@
     });
 
     modeIds.forEach(id => {
-      document.getElementById(id)?.addEventListener('change', () => {
+      const sel = document.getElementById(id);
+      sel?.addEventListener('change', () => {
+        if (sel && !sel.dataset.auto) sel.dataset.auto = '0';
+        if (sel) sel.dataset.auto = '0';
         if (id === 'taxesMode') updateOpexLabels('taxes');
         if (id === 'camMode') updateOpexLabels('cam');
         if (id === 'insMode') updateOpexLabels('ins');
         calculate();
       });
+      if (sel && !sel.dataset.auto) sel.dataset.auto = '1';
+    });
+
+    [
+      ['taxesStopType', 'taxes'],
+      ['camStopType', 'cam'],
+      ['insStopType', 'ins']
+    ].forEach(([id, kind]) => {
+      const sel = document.getElementById(id);
+      if (sel) {
+        sel.addEventListener('change', () => {
+          updateOpexLabels(kind);
+          calculate();
+        });
+      }
+    });
+
+    ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(id => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
     });
 
     [
@@ -1151,22 +1184,9 @@
         // Gross: landlord pays all; lock switches
         setAll(false, true);
       } else if (v === 'mg') {
-        // Base-year stop across the 3 core lines
         setAll(false, true);
-        show('.opx-base', true);
         show('.opx-mode', true);
-        ['taxes', 'cam', 'ins'].forEach(line => {
-          const sel = q(`#${line}Mode`);
-          if (sel) sel.value = 'stop';
-          const stopSel = q(`#${line}StopType`);
-          if (stopSel) stopSel.value = 'base';
-        });
-      } else if (v === 'custom') {
-        // Universal “Custom” mode
-        [incTaxes, incCam, incIns].forEach(cb => cb && (cb.disabled = true));
-        show('.opx-mode', true);              // per-line mode selects
       } else {
-        // Fallback
         [incTaxes, incCam, incIns].forEach(cb => cb && (cb.disabled = false));
       }
 
@@ -1370,7 +1390,7 @@
       const tiPerSF_forDisplay = area ? (llAllowanceApplied / area) : 0;
 
       // Services + OpEx + growth
-      const type = $('#serviceType')?.value || 'nnn'; // 'nnn' | 'gross' | 'mg' | 'custom'
+      const type = $('#serviceType')?.value || 'nnn'; // 'nnn' | 'gross' | 'mg'
       const taxes = rawNumberFromInput($('#taxes'));
       const cam = rawNumberFromInput($('#cam'));
       const ins = rawNumberFromInput($('#ins'));
@@ -1706,31 +1726,29 @@
         let llTxMo = 0, llCamMo = 0, llInsMo = 0;
         let llOpexPSF = 0;
 
-        if (type === "nnn") {
-          tenTxMo = txMo; tenCamMo = camMo; tenInsMo = insMo;
-          // LL pays none
-        } else if (type === "gross") {
-          llTxMo = txMo; llCamMo = camMo; llInsMo = insMo;
-          llOpexPSF = txMo + camMo + insMo;
-        } else if (type === "mg") {
-          const t = treatCategory('stop', txMo, taxesStopMeta);
-          const c = treatCategory('stop', camMo, camStopMeta);
-          const i = treatCategory('stop', insMo, insStopMeta);
-          tenTxMo = t.tenantPSF; tenCamMo = c.tenantPSF; tenInsMo = i.tenantPSF;
-          llTxMo = t.llPSF; llCamMo = c.llPSF; llInsMo = i.llPSF;
-          llOpexPSF = llTxMo + llCamMo + llInsMo;
-        } else if (type === "custom") {
-          const t = (taxesMode === 'stop') ? treatCategory('stop', txMo, taxesStopMeta) : treatCategory(taxesMode, txMo, taxesStopMeta);
-          const c = (camMode === 'stop') ? treatCategory('stop', camMo, camStopMeta) : treatCategory(camMode, camMo, camStopMeta);
-          const i = (insMode === 'stop') ? treatCategory('stop', insMo, insStopMeta) : treatCategory(insMode, insMo, insStopMeta);
-          tenTxMo = t.tenantPSF; tenCamMo = c.tenantPSF; tenInsMo = i.tenantPSF;
-          llTxMo = t.llPSF; llCamMo = c.llPSF; llInsMo = i.llPSF;
-          llOpexPSF = llTxMo + llCamMo + llInsMo;
-        } else {
-          tenTxMo = txMo;
-          tenCamMo = camMo;
-          tenInsMo = insMo;
-        }
+        const effectiveTaxesMode = (type === 'nnn') ? 'tenant' : (type === 'gross') ? 'landlord' : taxesMode;
+        const effectiveCamMode = (type === 'nnn') ? 'tenant' : (type === 'gross') ? 'landlord' : camMode;
+        const effectiveInsMode = (type === 'nnn') ? 'tenant' : (type === 'gross') ? 'landlord' : insMode;
+
+        const taxesShare = (effectiveTaxesMode === 'stop')
+          ? treatCategory('stop', txMo, taxesStopMeta)
+          : treatCategory(effectiveTaxesMode, txMo, taxesStopMeta);
+        const camShare = (effectiveCamMode === 'stop')
+          ? treatCategory('stop', camMo, camStopMeta)
+          : treatCategory(effectiveCamMode, camMo, camStopMeta);
+        const insShare = (effectiveInsMode === 'stop')
+          ? treatCategory('stop', insMo, insStopMeta)
+          : treatCategory(effectiveInsMode, insMo, insStopMeta);
+
+        tenTxMo = taxesShare.tenantPSF;
+        tenCamMo = camShare.tenantPSF;
+        tenInsMo = insShare.tenantPSF;
+
+        llTxMo = taxesShare.llPSF;
+        llCamMo = camShare.llPSF;
+        llInsMo = insShare.llPSF;
+
+        llOpexPSF = llTxMo + llCamMo + llInsMo;
 
         // tenant OpEx (core lines) before abatement this month
         const preTenantOpExPSF_core = tenTxMo + tenCamMo + tenInsMo;
@@ -2133,9 +2151,9 @@
       // -----------------------------------------------------------------------
       // Build “model” and publish for charts/scenarios
       // -----------------------------------------------------------------------
-      const taxesModeForModel = (type === 'custom') ? taxesMode : (type === 'gross' ? 'landlord' : (type === 'mg' ? 'stop' : 'tenant'));
-      const camModeForModel = (type === 'custom') ? camMode : (type === 'gross' ? 'landlord' : (type === 'mg' ? 'stop' : 'tenant'));
-      const insModeForModel = (type === 'custom') ? insMode : (type === 'gross' ? 'landlord' : (type === 'mg' ? 'stop' : 'tenant'));
+      const taxesModeForModel = taxesMode;
+      const camModeForModel = camMode;
+      const insModeForModel = insMode;
       const mgmtModeForModel = mgmtMode;
 
       const model = {
@@ -2265,6 +2283,25 @@
     // Tiny formatter for header badges used in table <th> labels
     function hdrBadge(text) {
       return text ? `<small class="hdr-note">${text}</small>` : '';
+    }
+
+    function lineDisplayPolicy({ perspective, mode, stopType }) {
+      const view = (perspective || '').toString().toLowerCase();
+      const normalizedMode = (mode || '').toString().toLowerCase();
+      const normalizedStop = (stopType || '').toString().toLowerCase();
+
+      const showColumn = (view === 'tenant') ? (normalizedMode !== 'landlord') : true;
+
+      let badge = '';
+      if (normalizedMode === 'tenant') {
+        badge = (view === 'tenant') ? 'Tenant-paid' : 'Recovered';
+      } else if (normalizedMode === 'landlord') {
+        badge = 'LL-paid';
+      } else if (normalizedMode === 'stop') {
+        badge = 'split';
+      }
+
+      return { showColumn, badge, mode: normalizedMode, stopType: normalizedStop };
     }
   
   // ------------------------------- Renderers -----------------------------------
@@ -2495,27 +2532,73 @@
       return;
     }
 
-    const serviceType = (model?.serviceType || '').toLowerCase();
     const coreModes = model?.coreOpExModes || {};
     const coreStopTypes = model?.coreOpExStopTypes || {};
     const normalizeMode = (mode) => (mode || '').toLowerCase();
     const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
     const scheduleRaw = Array.isArray(model?.schedule) ? model.schedule : [];
     const hasOther = !!model?.hasOtherOpEx;
+    const customExpenses = Array.isArray(model?.customExpenses) ? model.customExpenses : [];
 
-    const isTenantView = (perspective || '').toLowerCase() === 'tenant';
-    const labelForTenant = (txt) => {
-      if (!isTenantView) return txt;
-      return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
+    const otherMeta = (() => {
+      if (!hasOther) return { mode: 'landlord', stopType: 'base' };
+      let hasStop = false;
+      let hasTenant = false;
+      let anyFixed = false;
+      customExpenses.forEach(exp => {
+        const m = (exp.mode || '').toLowerCase();
+        if (m === 'stop') {
+          hasStop = true;
+          if ((exp.stopType || '').toLowerCase() === 'fixed') anyFixed = true;
+        } else if (m === 'tenant') {
+          hasTenant = true;
+        }
+      });
+      if (hasStop) return { mode: 'stop', stopType: anyFixed ? 'fixed' : 'base' };
+      if (hasTenant) return { mode: 'tenant', stopType: 'base' };
+      return { mode: 'landlord', stopType: 'base' };
+    })();
+
+    const lineMeta = {
+      taxes: { mode: normalizeMode(coreModes.taxes), stopType: stopTypeFor('taxes') },
+      cam:   { mode: normalizeMode(coreModes.cam), stopType: stopTypeFor('cam') },
+      ins:   { mode: normalizeMode(coreModes.ins), stopType: stopTypeFor('ins') },
+      mgmt:  { mode: normalizeMode(coreModes.mgmt), stopType: stopTypeFor('mgmt') },
+      other: otherMeta
     };
 
-    const taxTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'taxes')));
-    const camTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'cam')));
-    const insTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'ins')));
-    const mgmTag = hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'mgmt')));
-    const othTag = hasOther ? hdrBadge(labelForTenant(payerLabel(scheduleRaw, 'other'))) : '';
+    const policiesTenant = {
+      taxes: lineDisplayPolicy({ perspective: 'tenant', ...lineMeta.taxes }),
+      cam:   lineDisplayPolicy({ perspective: 'tenant', ...lineMeta.cam }),
+      ins:   lineDisplayPolicy({ perspective: 'tenant', ...lineMeta.ins }),
+      mgmt:  lineDisplayPolicy({ perspective: 'tenant', ...lineMeta.mgmt }),
+      other: lineDisplayPolicy({ perspective: 'tenant', ...lineMeta.other })
+    };
 
-    const otherLabelBase = 'Other OpEx ($/SF/yr)';
+    const policiesLandlord = {
+      taxes: lineDisplayPolicy({ perspective: 'landlord', ...lineMeta.taxes }),
+      cam:   lineDisplayPolicy({ perspective: 'landlord', ...lineMeta.cam }),
+      ins:   lineDisplayPolicy({ perspective: 'landlord', ...lineMeta.ins }),
+      mgmt:  lineDisplayPolicy({ perspective: 'landlord', ...lineMeta.mgmt }),
+      other: lineDisplayPolicy({ perspective: 'landlord', ...lineMeta.other })
+    };
+
+    const labelForLine = (baseName, meta) => {
+      if ((meta.mode || '') === 'stop') {
+        const suffix = (meta.stopType === 'fixed') ? 'Over Fixed Stop' : 'Over Base';
+        return `${baseName} ${suffix} ($/SF/yr)`;
+      }
+      return `${baseName} ($/SF/yr)`;
+    };
+
+    const headerFor = (baseName, meta, policy) => {
+      const label = labelForLine(baseName, meta);
+      const badge = hdrBadge(policy.badge);
+      return {
+        label,
+        headerHTML: badge ? `${label}${badge}` : undefined
+      };
+    };
 
     const tenantColumns = [
       { key: 'period', label: 'Period', render: r => r.period },
@@ -2525,50 +2608,25 @@
       { key: 'baseRentPSF', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF || 0) }
     ];
 
-    const showTaxesTenant = rows.some(r => Math.abs(Number(r.taxesPSF || 0)) > 1e-9);
-    const showCamTenant = rows.some(r => Math.abs(Number(r.camPSF || 0)) > 1e-9);
-    const showInsTenant = rows.some(r => Math.abs(Number(r.insPSF || 0)) > 1e-9);
-    const showOtherTenant = hasOther && rows.some(r => Math.abs(Number(r.otherPSF || 0)) > 1e-9);
-    const showMgmtTenant = rows.some(r => Math.abs(Number(r.mgmtPSF || 0)) > 1e-9);
-
-    const pushTenantCol = (opts) => {
-      const labelText = opts.label;
-      const headerHTML = opts.badge ? `${labelText}${opts.badge}` : labelText;
+    const pushTenantCol = (key, meta, policy, baseName) => {
+      if (!policy.showColumn) return;
+      const labelText = labelForLine(baseName, meta);
+      const badgeHtml = hdrBadge(policy.badge);
       tenantColumns.push({
-        key: opts.key,
+        key,
         label: labelText,
-        headerHTML,
-        render: r => fmtUSD(Number(r[opts.key] || 0))
+        headerHTML: badgeHtml ? `${labelText}${badgeHtml}` : labelText,
+        render: r => fmtUSD(Number(r[key] || 0))
       });
     };
 
-    if (showTaxesTenant) {
-      const label = (serviceType === 'mg' || normalizeMode(coreModes.taxes) === 'stop')
-        ? (stopTypeFor('taxes') === 'fixed' ? 'Taxes Over Fixed Stop ($/SF/yr)' : 'Taxes Over Base ($/SF/yr)')
-        : 'Taxes ($/SF/yr)';
-      pushTenantCol({ key: 'taxesPSF', label, badge: taxTag });
+    pushTenantCol('taxesPSF', lineMeta.taxes, policiesTenant.taxes, 'Taxes');
+    pushTenantCol('camPSF', lineMeta.cam, policiesTenant.cam, 'CAM');
+    pushTenantCol('insPSF', lineMeta.ins, policiesTenant.ins, 'Insurance');
+    if (hasOther) {
+      pushTenantCol('otherPSF', lineMeta.other, policiesTenant.other, 'Other OpEx');
     }
-    if (showCamTenant) {
-      const label = (serviceType === 'mg' || normalizeMode(coreModes.cam) === 'stop')
-        ? (stopTypeFor('cam') === 'fixed' ? 'CAM Over Fixed Stop ($/SF/yr)' : 'CAM Over Base ($/SF/yr)')
-        : 'CAM ($/SF/yr)';
-      pushTenantCol({ key: 'camPSF', label, badge: camTag });
-    }
-    if (showInsTenant) {
-      const label = (serviceType === 'mg' || normalizeMode(coreModes.ins) === 'stop')
-        ? (stopTypeFor('ins') === 'fixed' ? 'Insurance Over Fixed Stop ($/SF/yr)' : 'Insurance Over Base ($/SF/yr)')
-        : 'Insurance ($/SF/yr)';
-      pushTenantCol({ key: 'insPSF', label, badge: insTag });
-    }
-    if (showOtherTenant) {
-      pushTenantCol({ key: 'otherPSF', label: otherLabelBase, badge: othTag });
-    }
-    if (showMgmtTenant) {
-      const label = (normalizeMode(coreModes.mgmt) === 'stop')
-        ? 'Management Fee Over Base ($/SF/yr)'
-        : 'Management Fee ($/SF/yr)';
-      pushTenantCol({ key: 'mgmtPSF', label, badge: mgmTag });
-    }
+    pushTenantCol('mgmtPSF', lineMeta.mgmt, policiesTenant.mgmt, 'Management Fee');
 
     tenantColumns.push(
       { key: 'grossPSF', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF || 0) },
@@ -2581,23 +2639,46 @@
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
       { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
-      { key: 'baseRentPSF_LL', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF_LL || 0) },
-      { key: 'taxesPSF_LL', label: 'Taxes ($/SF/yr)', headerHTML: taxTag ? `Taxes ($/SF/yr)${taxTag}` : undefined, render: r => fmtUSD(r.taxesPSF_LL || 0) },
-      { key: 'camPSF_LL', label: 'CAM ($/SF/yr)', headerHTML: camTag ? `CAM ($/SF/yr)${camTag}` : undefined, render: r => fmtUSD(r.camPSF_LL || 0) },
-      { key: 'insPSF_LL', label: 'Insurance ($/SF/yr)', headerHTML: insTag ? `Insurance ($/SF/yr)${insTag}` : undefined, render: r => fmtUSD(r.insPSF_LL || 0) }
+      { key: 'baseRentPSF_LL', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF_LL || 0) }
     ];
 
+    const taxesHeader = headerFor('Taxes', lineMeta.taxes, policiesLandlord.taxes);
+    landlordColumns.push({
+      key: 'taxesPSF_LL',
+      label: taxesHeader.label,
+      headerHTML: taxesHeader.headerHTML,
+      render: r => fmtUSD(r.taxesPSF_LL || 0)
+    });
+
+    const camHeader = headerFor('CAM', lineMeta.cam, policiesLandlord.cam);
+    landlordColumns.push({
+      key: 'camPSF_LL',
+      label: camHeader.label,
+      headerHTML: camHeader.headerHTML,
+      render: r => fmtUSD(r.camPSF_LL || 0)
+    });
+
+    const insHeader = headerFor('Insurance', lineMeta.ins, policiesLandlord.ins);
+    landlordColumns.push({
+      key: 'insPSF_LL',
+      label: insHeader.label,
+      headerHTML: insHeader.headerHTML,
+      render: r => fmtUSD(r.insPSF_LL || 0)
+    });
+
     if (hasOther) {
+      const otherHeader = headerFor('Other OpEx', lineMeta.other, policiesLandlord.other);
       landlordColumns.push({
         key: 'otherPSF',
-        label: otherLabelBase,
-        headerHTML: othTag ? `${otherLabelBase}${othTag}` : undefined,
+        label: otherHeader.label,
+        headerHTML: otherHeader.headerHTML,
         render: r => fmtUSD(Number(r.otherPSF || 0))
       });
     }
 
+    const mgmtHeader = headerFor('Management Fee', lineMeta.mgmt, policiesLandlord.mgmt);
     landlordColumns.push(
-      { key: 'mgmtPSF_LL', label: 'Management Fee ($/SF/yr)', headerHTML: mgmTag ? `Management Fee ($/SF/yr)${mgmTag}` : undefined, render: r => fmtUSD(r.mgmtPSF_LL || 0) },
+      { key: 'mgmtPSF_LL', label: mgmtHeader.label, headerHTML: mgmtHeader.headerHTML, render: r => fmtUSD(r.mgmtPSF_LL || 0) },
       { key: 'grossPSF_LL', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF_LL || 0) },
       { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
       { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }

@@ -226,7 +226,7 @@
 <!-- Services spans the row already -->
 <div class="section-head col-span-4" id="sec-services">
   <h3 class="section-title">Services</h3>
-  <p class="section-sub">NNN, MG (stop), Gross, or Custom</p>
+  <p class="section-sub">NNN, Modified Gross, or Gross</p>
 </div>
 
 <!-- Services (full row) -->
@@ -236,7 +236,6 @@
     <option value="nnn" selected>NNN (Base + Taxes + CAM + Insurance)</option>
     <option value="mg">Modified Gross</option>
     <option value="gross">Gross (Base only)</option>
-    <option value="custom">Custom</option>
   </select>
 </div>
 
@@ -300,6 +299,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="taxes" style="display:none;">
@@ -427,6 +441,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="cam" style="display:none;">
