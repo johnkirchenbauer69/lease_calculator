@@ -2708,7 +2708,7 @@
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
       { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
-      { key: 'baseRentPSF', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF || 0) }
+      { key: 'baseRentPSF', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF || 0), isPSF: true }
     ];
 
     const pushTenantCol = (key, meta, policy, baseName) => {
@@ -2719,7 +2719,8 @@
         key,
         label: labelText,
         headerHTML: badgeHtml ? `${labelText}${badgeHtml}` : labelText,
-        render: r => fmtUSD(Number(r[key] || 0))
+        render: r => fmtUSD(Number(r[key] || 0)),
+        isPSF: true
       });
     };
 
@@ -2732,9 +2733,9 @@
     pushTenantCol('mgmtPSF', lineMeta.mgmt, policiesTenant.mgmt, 'Management Fee');
 
     tenantColumns.push(
-      { key: 'grossPSF', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF || 0) },
-      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0, className: 'cell-dollar' },
-      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0, className: 'cell-dollar' }
+      { key: 'grossPSF', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF || 0), isPSF: true },
+      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0, className: 'cell-dollar', isDollar: true },
+      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0, className: 'cell-dollar', isDollar: true }
     );
 
     const landlordColumns = [
@@ -2742,7 +2743,7 @@
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
       { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
-      { key: 'baseRentPSF_LL', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF_LL || 0) }
+      { key: 'baseRentPSF_LL', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF_LL || 0), isPSF: true }
     ];
 
     const taxesHeader = headerFor('Taxes', lineMeta.taxes, policiesLandlord.taxes);
@@ -2750,7 +2751,8 @@
       key: 'taxesPSF_LL',
       label: taxesHeader.label,
       headerHTML: taxesHeader.headerHTML,
-      render: r => fmtUSD(r.taxesPSF_LL || 0)
+      render: r => fmtUSD(r.taxesPSF_LL || 0),
+      isPSF: true
     });
 
     const camHeader = headerFor('CAM', lineMeta.cam, policiesLandlord.cam);
@@ -2758,7 +2760,8 @@
       key: 'camPSF_LL',
       label: camHeader.label,
       headerHTML: camHeader.headerHTML,
-      render: r => fmtUSD(r.camPSF_LL || 0)
+      render: r => fmtUSD(r.camPSF_LL || 0),
+      isPSF: true
     });
 
     const insHeader = headerFor('Insurance', lineMeta.ins, policiesLandlord.ins);
@@ -2766,7 +2769,8 @@
       key: 'insPSF_LL',
       label: insHeader.label,
       headerHTML: insHeader.headerHTML,
-      render: r => fmtUSD(r.insPSF_LL || 0)
+      render: r => fmtUSD(r.insPSF_LL || 0),
+      isPSF: true
     });
 
     if (hasOther) {
@@ -2775,16 +2779,17 @@
         key: 'otherPSF',
         label: otherHeader.label,
         headerHTML: otherHeader.headerHTML,
-        render: r => fmtUSD(Number(r.otherPSF || 0))
+        render: r => fmtUSD(Number(r.otherPSF || 0)),
+        isPSF: true
       });
     }
 
     const mgmtHeader = headerFor('Management Fee', lineMeta.mgmt, policiesLandlord.mgmt);
     landlordColumns.push(
-      { key: 'mgmtPSF_LL', label: mgmtHeader.label, headerHTML: mgmtHeader.headerHTML, render: r => fmtUSD(r.mgmtPSF_LL || 0) },
-      { key: 'grossPSF_LL', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF_LL || 0) },
-      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0, className: 'cell-dollar' },
-      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0, className: 'cell-dollar' }
+      { key: 'mgmtPSF_LL', label: mgmtHeader.label, headerHTML: mgmtHeader.headerHTML, render: r => fmtUSD(r.mgmtPSF_LL || 0), isPSF: true },
+      { key: 'grossPSF_LL', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF_LL || 0), isPSF: true },
+      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0, className: 'cell-dollar', isDollar: true },
+      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0, className: 'cell-dollar', isDollar: true }
     );
 
     return (perspective === 'tenant') ? tenantColumns : landlordColumns;
@@ -2866,13 +2871,6 @@ function renderMonthly(data, table, thead, tbody) {
   renderScheduleTable(data, activePerspective, table, thead, tbody);
 } // <— IMPORTANT: close renderMonthly here
 
-  // helper to construct period range for Annual (keep this)
-  const periodRange = (rows) => {
-    const start = rows[0]?.monthIndex || 1;
-    const end   = rows[rows.length - 1]?.monthIndex || start;
-    return (start === end) ? String(start) : `${start}\u2013${end}`; // en dash
-  };
-
 // -----------------------------------------------------------------------
 // Annual Rent Schedule Table
 // -----------------------------------------------------------------------
@@ -2880,142 +2878,143 @@ function renderAnnual(data, table, thead, tbody) {
   table.classList.add('annual-view');
   table.classList.remove('monthly-sub-view');
 
-  const hasOther = !!data.hasOtherOpEx;
-  const hasMgmt  = (data.mgmt?.ratePct || 0) > 0;
-  const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
+  const perspective = activePerspective || 'landlord';
+  const monthlyRows = buildMonthlyRows(data, perspective);
 
-  const isTenantView = (activePerspective || '').toLowerCase() === 'tenant';
-  const serviceType = (data.serviceType || '').toLowerCase();
-  const coreModes = data.coreOpExModes || {};
-  const coreStopTypes = data.coreOpExStopTypes || {};
-  const normalizeMode = (mode) => (mode || '').toLowerCase();
-  const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
-  const labelWithStop = (base, key) => {
-    const mode = normalizeMode(coreModes[key]);
-    const isStop = (serviceType === 'mg') || mode === 'stop';
-    if (!isStop) return `${base} ($/SF/yr)`;
-    const suffix = stopTypeFor(key) === 'fixed' ? 'Over Fixed Stop' : 'Over Base';
-    return `${base} ${suffix} ($/SF/yr)`;
-  };
-  const labelForTenant = (txt) => {
-    if (!isTenantView) return txt;
-    return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
-  };
+  if (!Array.isArray(monthlyRows) || monthlyRows.length === 0) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    return;
+  }
 
-  // Tags aggregated across the whole schedule
-  const taxTag   = hdrBadge(labelForTenant(payerLabel(data.schedule, 'taxes')));
-  const camTag   = hdrBadge(labelForTenant(payerLabel(data.schedule, 'cam')));
-  const insTag   = hdrBadge(labelForTenant(payerLabel(data.schedule, 'ins')));
-  const othTag   = hasOther ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'other'))) : '';
-  const mgmtTag  = hasMgmt  ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'mgmt')))  : '';
+  const schema = buildMonthlyColumns(data, perspective).map(col => ({ ...col }));
 
-  const taxesHeaderLabel = labelWithStop('Taxes', 'taxes');
-  const camHeaderLabel = labelWithStop('CAM', 'cam');
-  const insHeaderLabel = labelWithStop('Insurance', 'ins');
-  const mgmtBaseLabel = `Mgmt Fee (${data.mgmt?.appliedOn === 'net' ? 'on Net' : 'on Gross'})`;
-  const mgmtHeaderLabel = (normalizeMode(coreModes.mgmt) === 'stop')
-    ? `${mgmtBaseLabel} ${stopTypeFor('mgmt') === 'fixed' ? 'Over Fixed Stop' : 'Over Base'} ($/SF/yr)`
-    : `${mgmtBaseLabel} ($/SF/yr)`;
+  schema.forEach(col => {
+    if (col.key === 'monthlyNet$') {
+      col.label = 'Total Net Rent ($)';
+      if (col.headerHTML) {
+        col.headerHTML = col.headerHTML.replace(/Monthly Net Rent/gi, 'Total Net Rent');
+      }
+      col.render = (row) => fmtUSD(Number(row.monthlyNet$ || 0));
+    } else if (col.key === 'monthlyGross$') {
+      col.label = 'Total Gross Rent ($)';
+      if (col.headerHTML) {
+        col.headerHTML = col.headerHTML.replace(/Monthly Gross Rent/gi, 'Total Gross Rent');
+      }
+      col.render = (row) => fmtUSD(Number(row.monthlyGross$ || 0));
+    }
+  });
 
-  thead.innerHTML = `<tr>
-    <th>Period</th>
-    <th>Year</th>
-    <th>Months</th>
-    <th>Space Size (SF)</th>
-    <th>Net Rent ($/SF/yr)</th>
-    <th>${taxesHeaderLabel}${taxTag}</th>
-    <th>${camHeaderLabel}${camTag}</th>
-    <th>${insHeaderLabel}${insTag}</th>
-    ${hasOther ? `<th>Other ($/SF/yr)${othTag}</th>` : ''}
-    ${hasMgmt ? `<th>${mgmtHeaderLabel}${mgmtTag}</th>` : ''}
-    <th>Gross Rent ($/SF/yr)</th>
-    <th>Monthly Net Rent</th>
-    <th>Total Net Rent</th>
-    <th>Monthly Gross Rent</th>
-    <th>Total Gross Rent</th>
-  </tr>`;
+  renderTableHeader(schema, thead);
 
   tbody.innerHTML = '';
 
-  const byYear = groupBy(data.schedule, r => r.calYear);
-  const frag = document.createDocumentFragment();
+  const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
+  const psfKeys = schema.filter(col => col.isPSF && col.key).map(col => col.key);
+  const sumKeys = schema.filter(col => typeof col.sum === 'function').map(col => col.key);
 
-  byYear.forEach((rows, yr) => {
-    const months = rows.length;
-    const area   = rows[0].area;
+  const weightForRow = (row) => {
+    const w = Number(row.cashFactor);
+    return Number.isFinite(w) && w > 0 ? w : 1;
+  };
 
-    const netPSF  = rows.reduce((s,r)=> s + ((r.tenPSF?.net)   || 0), 0) / months;
-    const taxPSF  = rows.reduce((s,r)=> s + ((r.tenPSF?.taxes) || 0), 0) / months;
-    const camPSF  = rows.reduce((s,r)=> s + ((r.tenPSF?.cam)   || 0), 0) / months;
-    const insPSF  = rows.reduce((s,r)=> s + ((r.tenPSF?.ins)   || 0), 0) / months;
-    const othPSF  = hasOther ? (rows.reduce((s,r)=> s + ((r.tenPSF?.other) || 0), 0) / months) : 0;
-    const mgmtPSF = hasMgmt ?  (rows.reduce((s,r)=> s + ((r.tenPSF?.mgmt)  || 0), 0) / months) : 0;
-    const grossPSF= includeGross
-      ? rows.reduce((s,r)=> s + ((r.tenPSF?.gross) || 0), 0) / months
-      : netPSF;
-    
-
-    // show mgmt PSF, but only count tenant-paid share in gross PSF
-    const mgmtPSFDisp   = hasMgmt ? (rows.reduce((s,r)=> s + (r.contractMgmtAnnualPSF || 0), 0) / months) : 0;
-    const mgmtPSFTenant = hasMgmt ? (rows.reduce((s,r)=> s + ((r.tenantMgmt$ > 0 ? (r.contractMgmtAnnualPSF || 0) : 0)), 0) / months) : 0;
-
-    const totalNet     = rows.reduce((s,r)=> s + r.netTotal,   0);
-    const totalGross   = includeGross
-      ? rows.reduce((s,r)=> s + (r.grossTotal || 0), 0)
-      : rows.reduce((s,r)=> s + (r.netTotal || 0), 0);
-    const monthlyNet   = totalNet   / months;
-    const monthlyGross = totalGross / months;
-
-    const period = periodRange(rows);
-
-    const tr = document.createElement('tr');
-    const cells = [
-      period, yr, `${months} Months`,
-      area.toLocaleString(),
-      fmtUSD(netPSF), fmtUSD(taxPSF), fmtUSD(camPSF), fmtUSD(insPSF)
-    ];
-    if (hasOther) cells.push(fmtUSD(othPSF));
-    if (hasMgmt)  cells.push(fmtUSD(mgmtPSFDisp));
-    cells.push(
-      fmtUSD(grossPSF),
-      fmtUSD(monthlyNet), fmtUSD(totalNet),
-      fmtUSD(monthlyGross), fmtUSD(totalGross)
-    );
-
-    cells.forEach(v => { const td = document.createElement('td'); td.textContent = v; tr.appendChild(td); });
-    frag.appendChild(tr);
+  const grouped = new Map();
+  monthlyRows.forEach(row => {
+    const yr = row.year;
+    if (!grouped.has(yr)) grouped.set(yr, []);
+    grouped.get(yr).push(row);
   });
 
-  tbody.appendChild(frag);
+  const sortedYears = Array.from(grouped.keys()).sort((a, b) => Number(a) - Number(b));
 
-  // Grand Total (sum $ columns; $/SF/yr columns are averages, so not additive)
-  const grandNet   = data.schedule.reduce((s, r) => s + (r.netTotal   || 0), 0);
-  const grandGross = includeGross
-    ? data.schedule.reduce((s, r) => s + (r.grossTotal || 0), 0)
-    : data.schedule.reduce((s, r) => s + (r.netTotal || 0), 0);
+  const grand = {
+    weight: 0,
+    psfWeighted: Object.fromEntries(psfKeys.map(key => [key, 0])),
+    totals: Object.fromEntries(sumKeys.map(key => [key, 0]))
+  };
 
-  // Label spans through the new Gross Rent ($/SF/yr) column
-  const labelColspan =
-    4  /* Period, Year, Months, Space */ +
-    4  /* Net/Taxes/CAM/Ins PSF */ +
-    (hasOther ? 1 : 0) +
-    (hasMgmt  ? 1 : 0) +
-    1; /* Gross PSF */
+  sortedYears.forEach(year => {
+    const rowsForYear = grouped.get(year);
+    const weightSum = rowsForYear.reduce((sum, row) => sum + weightForRow(row), 0);
 
-  const gt = document.createElement('tr');
-  gt.className = 'grand-total';
+    const aggRow = {
+      period: '',
+      year,
+      month: EM_DASH,
+      spaceSize: rowsForYear[0]?.spaceSize ?? 0
+    };
 
-  const tdLabel = document.createElement('td');
-  tdLabel.colSpan = labelColspan;
-  tdLabel.textContent = 'Grand Total';
-  gt.appendChild(tdLabel);
+    const periodValues = rowsForYear
+      .map(r => Number(r.period) || 0)
+      .filter(val => val > 0);
+    if (periodValues.length) {
+      const minP = Math.min(...periodValues);
+      const maxP = Math.max(...periodValues);
+      aggRow.period = (minP === maxP) ? String(minP) : `${minP}\u2013${maxP}`;
+    }
 
-  const tdMonNet = document.createElement('td');   tdMonNet.textContent = '—'; tdMonNet.className = 'muted'; gt.appendChild(tdMonNet);
-  const tdTotNet = document.createElement('td');   tdTotNet.textContent = fmtUSD(grandNet);     gt.appendChild(tdTotNet);
-  const tdMonGro = document.createElement('td');   tdMonGro.textContent = '—'; tdMonGro.className = 'muted'; gt.appendChild(tdMonGro);
-  const tdTotGro = document.createElement('td');   tdTotGro.textContent = fmtUSD(grandGross);   gt.appendChild(tdTotGro);
+    psfKeys.forEach(key => {
+      const weightedSum = rowsForYear.reduce((sum, row) => sum + (Number(row[key]) || 0) * weightForRow(row), 0);
+      const avg = weightSum ? (weightedSum / weightSum) : 0;
+      aggRow[key] = avg;
+      grand.psfWeighted[key] += weightedSum;
+    });
 
-  tbody.appendChild(gt);
+    sumKeys.forEach(key => {
+      const total = rowsForYear.reduce((sum, row) => sum + (Number(row[key]) || 0), 0);
+      aggRow[key] = total;
+      grand.totals[key] += total;
+    });
+
+    const tr = document.createElement('tr');
+    schema.forEach((col, idx) => {
+      const td = document.createElement('td');
+      if (col.className) {
+        col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+      }
+      let textContent;
+      if (col.key === 'spaceSize') {
+        textContent = (Number(aggRow.spaceSize || 0)).toLocaleString();
+      } else {
+        textContent = col.render(aggRow);
+      }
+      if (col.key === 'month') {
+        td.classList.add('cell-muted');
+      }
+      td.textContent = textContent;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+
+    grand.weight += weightSum;
+  });
+
+  const grandRow = document.createElement('tr');
+  grandRow.classList.add('grand-total', 'row-grandtotal');
+
+  schema.forEach((col, idx) => {
+    const td = document.createElement('td');
+    if (col.className) {
+      col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+    }
+
+    if (idx === labelColIdx) {
+      td.textContent = 'Grand Total';
+    } else if (psfKeys.includes(col.key)) {
+      const avg = grand.weight ? (grand.psfWeighted[col.key] / grand.weight) : 0;
+      td.textContent = fmtUSD(avg);
+    } else if (sumKeys.includes(col.key)) {
+      td.textContent = fmtUSD(grand.totals[col.key]);
+      td.classList.add('cell-dollar');
+    } else {
+      td.textContent = EM_DASH;
+      td.classList.add('cell-muted');
+    }
+
+    grandRow.appendChild(td);
+  });
+
+  tbody.appendChild(grandRow);
 }
 
 // -----------------------------------------------------------------------
