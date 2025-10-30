@@ -2936,6 +2936,8 @@ function renderAnnual(data, table, thead, tbody) {
 
   const schema = buildMonthlyColumns(data, perspective).map(col => ({ ...col }));
 
+  let monthColIndex = -1;
+
   schema.forEach(col => {
     if (col.key === 'monthlyNet$') {
       col.label = 'Total Net Rent ($)';
@@ -2949,6 +2951,13 @@ function renderAnnual(data, table, thead, tbody) {
         col.headerHTML = col.headerHTML.replace(/Monthly Gross Rent/gi, 'Total Gross Rent');
       }
       col.render = (row) => fmtUSD(Number(row.monthlyGross$ || 0));
+    } else if (col.key === 'month') {
+      monthColIndex = schema.indexOf(col);
+      col.label = 'Months';
+      if (col.headerHTML) {
+        col.headerHTML = col.headerHTML.replace(/Month/gi, 'Months');
+      }
+      col.render = (row) => row.month;
     }
   });
 
@@ -2987,9 +2996,12 @@ function renderAnnual(data, table, thead, tbody) {
     const aggRow = {
       period: '',
       year,
-      month: EM_DASH,
+      month: '',
       spaceSize: rowsForYear[0]?.spaceSize ?? 0
     };
+
+    const monthsInPeriod = rowsForYear.length;
+    aggRow.month = `${monthsInPeriod} Months`;
 
     const periodValues = rowsForYear
       .map(r => Number(r.period) || 0)
@@ -3025,19 +3037,24 @@ function renderAnnual(data, table, thead, tbody) {
       } else {
         textContent = col.render(aggRow);
       }
-      if (col.key === 'month') {
-        td.classList.add('cell-muted');
-      }
       td.textContent = textContent;
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
 
     grand.weight += weightSum;
+    if (monthColIndex !== -1) {
+      const monthColKey = schema[monthColIndex]?.key;
+      if (monthColKey) {
+        grand.totals[monthColKey] = (grand.totals[monthColKey] || 0) + monthsInPeriod;
+      }
+    }
   });
 
   const grandRow = document.createElement('tr');
   grandRow.classList.add('grand-total', 'row-grandtotal');
+
+  const totalMonths = monthlyRows.length;
 
   schema.forEach((col, idx) => {
     const td = document.createElement('td');
@@ -3053,6 +3070,8 @@ function renderAnnual(data, table, thead, tbody) {
     } else if (sumKeys.includes(col.key)) {
       td.textContent = fmtUSD(grand.totals[col.key]);
       td.classList.add('cell-dollar');
+    } else if (col.key === 'month') {
+      td.textContent = `${totalMonths} Months`;
     } else {
       td.textContent = EM_DASH;
       td.classList.add('cell-muted');
