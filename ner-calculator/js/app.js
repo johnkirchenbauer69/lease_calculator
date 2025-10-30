@@ -2576,7 +2576,7 @@
     };
 
     const tenantColumns = [
-      { key: 'period', label: 'Period', render: r => r.period },
+      { key: 'period', label: 'Period', render: r => r.period, isLabel: true },
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
       { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
@@ -2605,12 +2605,12 @@
 
     tenantColumns.push(
       { key: 'grossPSF', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF || 0) },
-      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
-      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
+      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0, className: 'cell-dollar' },
+      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0, className: 'cell-dollar' }
     );
 
     const landlordColumns = [
-      { key: 'period', label: 'Period', render: r => r.period },
+      { key: 'period', label: 'Period', render: r => r.period, isLabel: true },
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
       { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
@@ -2655,8 +2655,8 @@
     landlordColumns.push(
       { key: 'mgmtPSF_LL', label: mgmtHeader.label, headerHTML: mgmtHeader.headerHTML, render: r => fmtUSD(r.mgmtPSF_LL || 0) },
       { key: 'grossPSF_LL', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF_LL || 0) },
-      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
-      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
+      { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0, className: 'cell-dollar' },
+      { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0, className: 'cell-dollar' }
     );
 
     return (perspective === 'tenant') ? tenantColumns : landlordColumns;
@@ -2684,6 +2684,7 @@
     }
 
     const schema = buildMonthlyColumns(model, perspective);
+    const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
 
     renderTableHeader(schema, thead);
 
@@ -2695,7 +2696,11 @@
       const tr = document.createElement('tr');
       schema.forEach((col, idx) => {
         const td = document.createElement('td');
-        td.textContent = col.render(row);
+        const rendered = col.render(row);
+        if (col.className) {
+          col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+        }
+        td.textContent = rendered;
         tr.appendChild(td);
         if (sumFns[idx]) {
           totals[idx] += Number(sumFns[idx](row) || 0);
@@ -2705,15 +2710,20 @@
     });
 
     const totalRow = document.createElement('tr');
-    totalRow.classList.add('grand-total');
+    totalRow.classList.add('grand-total', 'row-grandtotal');
     schema.forEach((col, idx) => {
       const td = document.createElement('td');
-      if (idx === 0) {
+      if (col.className) {
+        col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+      }
+      if (idx === labelColIdx) {
         td.textContent = 'Grand Total';
       } else if (sumFns[idx]) {
         td.textContent = fmtUSD(totals[idx]);
+        td.classList.add('cell-dollar');
       } else {
-        td.textContent = '—';
+        td.textContent = EM_DASH;
+        td.classList.add('cell-muted');
       }
       totalRow.appendChild(td);
     });
@@ -2900,6 +2910,7 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   }
 
   const schema = buildMonthlyColumns(data, perspective);
+  const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
   renderTableHeader(schema, thead);
 
   tbody.innerHTML = '';
@@ -2912,7 +2923,11 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
     const tr = document.createElement('tr');
     schema.forEach((col, idx) => {
       const td = document.createElement('td');
-      td.textContent = col.render(row);
+      const rendered = col.render(row);
+      if (col.className) {
+        col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+      }
+      td.textContent = rendered;
       tr.appendChild(td);
       if (sumFns[idx]) {
         const val = Number(sumFns[idx](row) || 0);
@@ -2926,15 +2941,21 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   const flushSubtotal = (year) => {
     if (year == null) return;
     const tr = document.createElement('tr');
-    tr.classList.add('subtotal-row');
+    tr.classList.add('subtotal-row', 'row-subtotal');
     schema.forEach((col, idx) => {
       const td = document.createElement('td');
-      if (idx === 0) {
-        td.textContent = `Subtotal ${year}`;
+      if (col.className) {
+        col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+      }
+      if (idx === labelColIdx) {
+        td.setAttribute('aria-label', `Subtotal for ${year}`);
+        td.innerHTML = `<span class="year-chip" aria-hidden="true">${year}</span><span class="subtotal-text">Subtotal ${year}</span>`;
       } else if (sumFns[idx]) {
         td.textContent = fmtUSD(yearTotals[idx]);
+        td.classList.add('cell-dollar');
       } else {
-        td.textContent = '—';
+        td.textContent = EM_DASH;
+        td.classList.add('cell-muted');
       }
       tr.appendChild(td);
     });
@@ -2955,15 +2976,20 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   flushSubtotal(currentYear);
 
   const grandRow = document.createElement('tr');
-  grandRow.classList.add('grand-total');
+  grandRow.classList.add('grand-total', 'row-grandtotal');
   schema.forEach((col, idx) => {
     const td = document.createElement('td');
-    if (idx === 0) {
+    if (col.className) {
+      col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
+    }
+    if (idx === labelColIdx) {
       td.textContent = 'Grand Total';
     } else if (sumFns[idx]) {
       td.textContent = fmtUSD(grandTotals[idx]);
+      td.classList.add('cell-dollar');
     } else {
-      td.textContent = '—';
+      td.textContent = EM_DASH;
+      td.classList.add('cell-muted');
     }
     grandRow.appendChild(td);
   });
