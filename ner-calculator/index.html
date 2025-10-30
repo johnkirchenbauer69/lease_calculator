@@ -126,6 +126,86 @@
         console.warn('Geocoding failed:', e);
       }
     }
+// 1) Make marker draggable and add a popup "card"
+const popup = new maptilersdk.Popup({
+  closeButton: false,
+  closeOnClick: false,
+  offset: 18,
+  anchor: 'top'        // keeps the card above the pin
+}).setText('Move the pin or type an address…');
+
+marker.setDraggable(true).setPopup(popup).togglePopup(); // open by default
+
+// 2) Reverse geocode helper (lon, lat) -> formatted address string
+async function reverseGeocode(lon, lat) {
+  const url = `https://api.maptiler.com/geocoding/${lon},${lat}.json?limit=1&key=${MAPTILER_KEY}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    const feat = data?.features?.[0];
+
+    // Be defensive about which field holds the label
+    const name =
+      feat?.place_name ||
+      feat?.place_name_en ||
+      feat?.text ||
+      feat?.properties?.name ||
+      (Array.isArray(feat?.context) ? feat.context.map(c => c.text).join(', ') : null) ||
+      `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+
+    return name;
+  } catch (e) {
+    console.warn('Reverse geocoding failed:', e);
+    return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+  }
+}
+
+// 3) Update the marker popup + input field from coords
+async function updateCardAndInputFromCoords(lon, lat) {
+  const label = await reverseGeocode(lon, lat);
+  popup.setHTML(`<div class="map-card">
+      <div class="map-card-title">Selected location</div>
+      <div class="map-card-body">${label}</div>
+    </div>`);
+  if (addressInput) addressInput.value = label; // keep input in sync
+}
+
+// 4) Wire map click → move marker + reverse geocode
+map.on('click', async (e) => {
+  const { lng, lat } = e.lngLat;
+  marker.setLngLat([lng, lat]);
+  await updateCardAndInputFromCoords(lng, lat);
+});
+
+// 5) Wire marker drag end → reverse geocode
+marker.on('dragend', async () => {
+  const { lng, lat } = marker.getLngLat();
+  await updateCardAndInputFromCoords(lng, lat);
+});
+
+// 6) When user types an address (forward geocode), also update the popup
+async function geocodeForward(q) {
+  if (!q) return;
+  const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?limit=1&country=US&key=${MAPTILER_KEY}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
+    const data = await res.json();
+    const feat = data?.features?.[0];
+    const coords = feat?.center || feat?.geometry?.coordinates; // [lon, lat]
+    if (Array.isArray(coords)) {
+      map.flyTo({ center: coords, zoom: 17, duration: 700 });
+      marker.setLngLat(coords);
+      const label = feat?.place_name || feat?.place_name_en || feat?.text || addressInput?.value || 'Selected location';
+      popup.setHTML(`<div class="map-card">
+          <div class="map-card-title">Selected location</div>
+          <div class="map-card-body">${label}</div>
+        </div>`);
+      if (!popup.isOpen()) marker.togglePopup();
+    }
+  } catch (e) {
+    console.warn('Geocoding failed:', e);
+  }
+}
 
     // Wire to your existing address field
     const addressInput = document.getElementById('suite');
@@ -1228,4 +1308,5 @@
 </script>
 </body>
 </html>
+
 
