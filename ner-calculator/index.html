@@ -61,30 +61,12 @@
   }
 
   .lee-pin {
-    width: 26px;
-    height: 26px;
-    background: var(--lee-red);
-    border: 2px solid #fff;
-    border-radius: 50%;
-    box-shadow: 0 8px 18px rgba(0,0,0,.35);
-    position: relative;
+    width: 30px;
+    height: 42px;
     display: block;
     pointer-events: none;
-    transform: none;
-  }
-
-  .lee-pin::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    bottom: -8px;
-    transform: translateX(-50%) rotate(45deg);
-    width: 12px;
-    height: 12px;
-    background: var(--lee-red);
-    border-left: 2px solid #fff;
-    border-bottom: 2px solid #fff;
-    box-shadow: 0 6px 12px rgba(0,0,0,.25);
+    user-select: none;
+    filter: drop-shadow(0 8px 18px rgba(0,0,0,.35));
   }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@maptiler/sdk/dist/maptiler-sdk.umd.min.js" defer></script>
@@ -387,6 +369,21 @@
     </div>
   </div>
 
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Advanced row (spans all 4 columns) -->
   <div class="opx-adv col-1-4" data-for="taxes" hidden>
     <div class="adv-grid">
@@ -497,6 +494,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="cam" style="display:none;">

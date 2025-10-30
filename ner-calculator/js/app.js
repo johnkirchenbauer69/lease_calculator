@@ -75,8 +75,10 @@
       terrainControl: false
     });
 
-    const pin = document.createElement('div');
+    const pin = document.createElement('img');
     pin.className = 'lee-pin';
+    pin.src = 'assets/lee-pin.svg';
+    pin.alt = '';
 
     const marker = new maptilersdk.Marker({ element: pin, anchor: 'bottom', draggable: true })
       .setLngLat(defaultCenter)
@@ -97,6 +99,18 @@
       </div>
     `;
 
+    const ensurePopupOpen = () => {
+      marker.setPopup(popup);
+      if (!popup.isOpen()) {
+        marker.togglePopup();
+      }
+    };
+
+    const setPopupContent = (title, body) => {
+      popup.setHTML(buildPopupHTML(title, body));
+      ensurePopupOpen();
+    };
+
     const formatCoords = ([lng, lat]) => `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
     async function reverseGeocode([lng, lat]) {
@@ -107,7 +121,12 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const feat = data?.features?.[0];
-        return feat?.place_name || feat?.text || fallback;
+        return (
+          feat?.place_name_en ||
+          feat?.place_name ||
+          feat?.text ||
+          fallback
+        );
       } catch (err) {
         console.warn('Reverse geocode failed:', err);
         return fallback;
@@ -115,21 +134,37 @@
     }
 
     let popupRequestId = 0;
-    const updatePopupFromCoords = (title, coords, interim) => {
-      const reqId = ++popupRequestId;
-      popup.setHTML(buildPopupHTML(title, interim || 'Resolving address…'));
-      reverseGeocode(coords).then((addr) => {
-        if (popupRequestId !== reqId) return;
-        popup.setHTML(buildPopupHTML(title, addr));
-      });
+    const addressInput = document.getElementById('suite');
+    let isProgrammaticAddressUpdate = false;
+
+    const setAddressInput = (value) => {
+      if (!addressInput) return;
+      if (addressInput.value === value) return;
+      isProgrammaticAddressUpdate = true;
+      addressInput.value = value;
+      setTimeout(() => {
+        isProgrammaticAddressUpdate = false;
+      }, 0);
     };
 
-    marker.setPopup(popup).togglePopup();
-    updatePopupFromCoords('Selected location', defaultCenter);
+    const reverseGeocodeAndUpdate = async (coords, { title = 'Dropped pin' } = {}) => {
+      const pair = Array.isArray(coords) ? coords : [coords.lng, coords.lat];
+      const [lng, lat] = pair;
+      const reqId = ++popupRequestId;
+      setPopupContent(title, 'Resolving address…');
+      const address = await reverseGeocode([lng, lat]);
+      if (popupRequestId !== reqId) return;
+      setPopupContent(title, address);
+      setAddressInput(address);
+    };
+
+    marker.setPopup(popup);
+    setPopupContent('Selected location', 'Resolving address…');
+    reverseGeocodeAndUpdate(defaultCenter, { title: 'Selected location' });
 
     marker.on('dragend', () => {
       const { lng, lat } = marker.getLngLat();
-      updatePopupFromCoords('Dropped pin', [lng, lat]);
+      reverseGeocodeAndUpdate([lng, lat], { title: 'Dropped pin' });
     });
 
     const debounce = (fn, ms) => {
@@ -151,28 +186,40 @@
         if (Array.isArray(coords)) {
           map.flyTo({ center: coords, zoom: 15, duration: 700 });
           marker.setLngLat(coords);
-          const placeName = feat?.place_name || query;
-          updatePopupFromCoords('Selected location', coords, placeName);
+          const placeName = feat?.place_name_en || feat?.place_name || query;
+          popupRequestId++;
+          setPopupContent('Selected location', placeName);
         } else {
-          popup.setHTML(buildPopupHTML('No match found', 'Try another address'));
+          setPopupContent('No match found', 'Try another address');
         }
       } catch (err) {
         console.warn('Geocoding failed:', err);
-        popup.setHTML(buildPopupHTML('Geocoding unavailable', 'Please try again later.'));
+        setPopupContent('Geocoding unavailable', 'Please try again later.');
       }
     };
 
-    const addressInput = document.getElementById('suite');
     if (addressInput) {
       const trigger = debounce(() => geocodeForward(addressInput.value.trim()), 350);
-      addressInput.addEventListener('input', trigger);
-      addressInput.addEventListener('change', () => geocodeForward(addressInput.value.trim()));
+      addressInput.addEventListener('input', () => {
+        if (isProgrammaticAddressUpdate) return;
+        trigger();
+      });
+      addressInput.addEventListener('change', () => {
+        if (isProgrammaticAddressUpdate) return;
+        geocodeForward(addressInput.value.trim());
+      });
+      addressInput.addEventListener('keydown', (evt) => {
+        if (evt.key !== 'Enter') return;
+        if (isProgrammaticAddressUpdate) return;
+        evt.preventDefault();
+        geocodeForward(addressInput.value.trim());
+      });
     }
 
     map.on('click', (e) => {
       const coords = [e.lngLat.lng, e.lngLat.lat];
       marker.setLngLat(coords);
-      updatePopupFromCoords('Dropped pin', coords);
+      reverseGeocodeAndUpdate(coords, { title: 'Dropped pin' });
     });
   }
 
