@@ -21,10 +21,20 @@
 (function () {
   // ---- Helpers -------------------------------------------------------------
   const fmtUSD = n => (isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }) : "—");
-  const clamp  = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  const clamp  = (x) => Math.max(0, Math.min(1, x));
   const by    = (k) => (a,b) => (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0);
 
-  
+  const includeOpExForGross = (view, serviceType) => {
+    if (typeof window.includeOpExInGross === 'function') {
+      return window.includeOpExInGross(view, serviceType);
+    }
+    const v = (view || '').toString().toLowerCase();
+    const s = (serviceType || '').toString().toLowerCase();
+    const isNNN = s.includes('nnn') || s.includes('triple');
+    if (v === 'landlord' && isNNN) return false;
+    return true;
+  };
+
 /** Convert annual % to effective monthly rate for PV math. */
 function annPctToMonthly(rAnnual) {
     const r = +rAnnual || 0;
@@ -211,9 +221,11 @@ _renderAbatement(model);
       const cam$   = model.schedule.map(s => (+(s.camPSF||0)   * area));
       const ins$   = model.schedule.map(s => (+(s.insPSF||0)   * area));
 
+      const grossView = (this.cashTotalMode === 'net') ? 'tenant' : 'landlord';
+      const includeGross = includeOpExForGross(grossView, model.serviceType);
       const totalLine = (this.cashTotalMode === 'net')
         ? base$
-        : base$.map((b,i) => b + taxes$[i] + cam$[i] + ins$[i]);
+        : base$.map((b,i) => b + (includeGross ? (taxes$[i] + cam$[i] + ins$[i]) : 0));
 
       const abatedIdx = model.schedule
         .map((s,i) => (s.isAbated ? i : -1))
@@ -443,7 +455,9 @@ _renderPSFTrend(model) {
       const taxes$ = model.schedule.map(s => (+(s.taxesPSF||0) * area));
       const cam$   = model.schedule.map(s => (+(s.camPSF||0)   * area));
       const ins$   = model.schedule.map(s => (+(s.insPSF||0)   * area));
-      const gross$ = net$.map((b,i)=> b + taxes$[i] + cam$[i] + ins$[i]);
+      const perspective = (model.perspective === 'tenant') ? 'tenant' : 'landlord';
+      const includeGross = includeOpExForGross(perspective, model.serviceType);
+      const gross$ = net$.map((b,i)=> b + (includeGross ? (taxes$[i] + cam$[i] + ins$[i]) : 0));
 
       // Year index (0,1,2,...) per month
       const startYear = model.schedule[0]?.calYear || 0;
