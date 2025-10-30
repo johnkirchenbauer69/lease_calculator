@@ -21,6 +21,69 @@
 
 <!-- MapTiler SDK (CSS + JS) -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@maptiler/sdk/dist/maptiler-sdk.css" />
+<style>
+  /* Lee map theming */
+  #map .maplibregl-popup.lee-popup .maplibregl-popup-content,
+  #map .mapboxgl-popup.lee-popup .mapboxgl-popup-content {
+    background: linear-gradient(180deg, var(--popup-bg-a), var(--popup-bg-b));
+    color: #fff;
+    border-radius: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--popup-border);
+    box-shadow: var(--popup-shadow);
+    backdrop-filter: blur(4px);
+  }
+
+  #map .maplibregl-popup.lee-popup.maplibregl-popup-anchor-top    .maplibregl-popup-tip,
+  #map .mapboxgl-popup.lee-popup.mapboxgl-popup-anchor-top        .mapboxgl-popup-tip { border-bottom-color: rgba(8,8,10,.95) !important; }
+  #map .maplibregl-popup.lee-popup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+  #map .mapboxgl-popup.lee-popup.mapboxgl-popup-anchor-bottom     .mapboxgl-popup-tip { border-top-color:    rgba(8,8,10,.95) !important; }
+  #map .maplibregl-popup.lee-popup.maplibregl-popup-anchor-left   .maplibregl-popup-tip,
+  #map .mapboxgl-popup.lee-popup.mapboxgl-popup-anchor-left       .mapboxgl-popup-tip { border-right-color:  rgba(8,8,10,.95) !important; }
+  #map .maplibregl-popup.lee-popup.maplibregl-popup-anchor-right  .maplibregl-popup-tip,
+  #map .mapboxgl-popup.lee-popup.mapboxgl-popup-anchor-right      .mapboxgl-popup-tip { border-left-color:   rgba(8,8,10,.95) !important; }
+
+  #map .lee-popup .map-card-title {
+    color: #fff;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  #map .lee-popup .map-card-body {
+    color: #fff;
+    opacity: .95;
+  }
+
+  #map .lee-popup .maplibregl-popup-content a,
+  #map .lee-popup .mapboxgl-popup-content a {
+    color: #9bd3ff;
+    text-decoration: underline;
+  }
+
+  .lee-pin {
+    width: 26px;
+    height: 26px;
+    background: var(--lee-red);
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 8px 18px rgba(0,0,0,.35);
+    position: relative;
+  }
+
+  .lee-pin::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -8px;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: var(--lee-red);
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    box-shadow: 0 6px 12px rgba(0,0,0,.25);
+  }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/@maptiler/sdk/dist/maptiler-sdk.umd.min.js" defer></script>
 </head>
 
@@ -78,170 +141,6 @@
         <div id="mapToggle" class="map-toggle"></div>
         <small class="hint">Map centers automatically from the Property Address.</small>
       </div>
-
-<!-- Map script (MapTiler, self-contained) -->
-<script>
-  window.addEventListener('load', () => {
-    const MAPTILER_KEY = (window.MAPTILER_KEY || 'VTZLSqW7ZLguI0JButuB');
-    if (!MAPTILER_KEY || MAPTILER_KEY === 'VTZLSqW7ZLguI0JButuB') {
-      console.warn('MapTiler: please set MAPTILER_KEY.');
-    }
-
-    // Init SDK (official pattern)
-    maptilersdk.config.apiKey = MAPTILER_KEY; // docs: config.apiKey
-
-    const defaultCenter = [-87.6298, 41.8781]; // Chicago
-    const map = new maptilersdk.Map({
-      container: 'map',
-      style: 'streets-v4',
-      center: defaultCenter,
-      zoom: 10,
-      pitch: 0,
-      bearing: 0,
-      terrain: false,
-      terrainControl: false
-    });
-
-    const marker = new maptilersdk.Marker({ anchor: 'bottom' })
-      .setLngLat(defaultCenter)
-      .addTo(map);
-
-    // Debounce helper
-    function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
-
-    // MapTiler forward geocoding (JSON endpoint)
-    async function geocodeForward(q) {
-      if (!q) return;
-      const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?limit=1&country=US&key=${MAPTILER_KEY}`;
-      try {
-        const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
-        const data = await res.json();
-        const feat = data?.features?.[0];
-        const coords = feat?.center || feat?.geometry?.coordinates; // [lon, lat]
-        if (Array.isArray(coords)) {
-          map.flyTo({ center: coords, zoom: 15, duration: 700 });
-          marker.setLngLat(coords);
-        }
-      } catch (e) {
-        console.warn('Geocoding failed:', e);
-      }
-    }
-// 1) Make marker draggable and add a popup "card"
-const popup = new maptilersdk.Popup({
-  closeButton: false,
-  closeOnClick: false,
-  offset: 18,
-  anchor: 'top'        // keeps the card above the pin
-}).setText('Move the pin or type an address…');
-
-marker.setDraggable(true).setPopup(popup).togglePopup(); // open by default
-
-// 2) Reverse geocode helper (lon, lat) -> formatted address string
-async function reverseGeocode(lon, lat) {
-  const url = `https://api.maptiler.com/geocoding/${lon},${lat}.json?limit=1&key=${MAPTILER_KEY}`;
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    const data = await res.json();
-    const feat = data?.features?.[0];
-
-    // Be defensive about which field holds the label
-    const name =
-      feat?.place_name ||
-      feat?.place_name_en ||
-      feat?.text ||
-      feat?.properties?.name ||
-      (Array.isArray(feat?.context) ? feat.context.map(c => c.text).join(', ') : null) ||
-      `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-
-    return name;
-  } catch (e) {
-    console.warn('Reverse geocoding failed:', e);
-    return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-  }
-}
-
-// 3) Update the marker popup + input field from coords
-async function updateCardAndInputFromCoords(lon, lat) {
-  const label = await reverseGeocode(lon, lat);
-  popup.setHTML(`<div class="map-card">
-      <div class="map-card-title">Selected location</div>
-      <div class="map-card-body">${label}</div>
-    </div>`);
-  if (addressInput) addressInput.value = label; // keep input in sync
-}
-
-// 4) Wire map click → move marker + reverse geocode
-map.on('click', async (e) => {
-  const { lng, lat } = e.lngLat;
-  marker.setLngLat([lng, lat]);
-  await updateCardAndInputFromCoords(lng, lat);
-});
-
-// 5) Wire marker drag end → reverse geocode
-marker.on('dragend', async () => {
-  const { lng, lat } = marker.getLngLat();
-  await updateCardAndInputFromCoords(lng, lat);
-});
-
-// 6) When user types an address (forward geocode), also update the popup
-async function geocodeForward(q) {
-  if (!q) return;
-  const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?limit=1&country=US&key=${MAPTILER_KEY}`;
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' }});
-    const data = await res.json();
-    const feat = data?.features?.[0];
-    const coords = feat?.center || feat?.geometry?.coordinates; // [lon, lat]
-    if (Array.isArray(coords)) {
-      map.flyTo({ center: coords, zoom: 17, duration: 700 });
-      marker.setLngLat(coords);
-      const label = feat?.place_name || feat?.place_name_en || feat?.text || addressInput?.value || 'Selected location';
-      popup.setHTML(`<div class="map-card">
-          <div class="map-card-title">Selected location</div>
-          <div class="map-card-body">${label}</div>
-        </div>`);
-      if (!popup.isOpen()) marker.togglePopup();
-    }
-  } catch (e) {
-    console.warn('Geocoding failed:', e);
-  }
-}
-
-    // Wire to your existing address field
-    const addressInput = document.getElementById('suite');
-    if (addressInput) {
-      const trigger = debounce(() => geocodeForward(addressInput.value.trim()), 350);
-      addressInput.addEventListener('input', trigger);
-      addressInput.addEventListener('change', () => geocodeForward(addressInput.value.trim()));
-    }
-
-    // 2D / 3D toggle
-    const toggle = document.getElementById('mapToggle');
-    const btn2D = toggle?.querySelector('[data-mode="2d"]');
-    const btn3D = toggle?.querySelector('[data-mode="3d"]');
-
-    function setActive(on, off) {
-      on?.classList.add('active'); on?.setAttribute('aria-pressed', 'true');
-      off?.classList.remove('active'); off?.setAttribute('aria-pressed', 'false');
-    }
-
-    function to2D() {
-      if (map.isTerrainEnabled && map.isTerrainEnabled()) map.disableTerrain(); // turn off terrain
-      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
-      setActive(btn2D, btn3D);
-    }
-
-    function to3D() {
-      if (!map.isTerrainEnabled || !map.isTerrainEnabled()) map.enableTerrain({ exaggeration: 1.0 }); // enable terrain
-      map.easeTo({ pitch: 65, duration: 800 });
-      setActive(btn3D, btn2D);
-    }
-
-    btn2D?.addEventListener('click', to2D);
-    btn3D?.addEventListener('click', to3D);
-    to2D(); // start in 2D
-  });
-</script>
 
 <!-- Section: Deal basics -->
 <div class="section-head col-span-4" id="sec-deal">
@@ -441,6 +340,21 @@ async function geocodeForward(q) {
     </div>
   </div>
 
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Advanced row (spans all 4 columns) -->
   <div class="opx-adv col-1-4" data-for="taxes" hidden>
     <div class="adv-grid">
@@ -551,6 +465,21 @@ async function geocodeForward(q) {
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="cam" style="display:none;">

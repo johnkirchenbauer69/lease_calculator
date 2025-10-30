@@ -50,6 +50,164 @@
     return false;
   }
 
+  // ------------------------------- Map / Marker -------------------------------
+  function initMap() {
+    if (typeof maptilersdk === 'undefined') return;
+    const mapEl = document.getElementById('map');
+    if (!mapEl) return;
+
+    const MAPTILER_KEY = window.MAPTILER_KEY || 'VTZLSqW7ZLguI0JButuB';
+    if (!MAPTILER_KEY || MAPTILER_KEY === 'VTZLSqW7ZLguI0JButuB') {
+      console.warn('MapTiler: please set MAPTILER_KEY.');
+    }
+
+    maptilersdk.config.apiKey = MAPTILER_KEY;
+
+    const defaultCenter = [-87.6298, 41.8781];
+    const map = new maptilersdk.Map({
+      container: 'map',
+      style: 'streets-v4',
+      center: defaultCenter,
+      zoom: 10,
+      pitch: 0,
+      bearing: 0,
+      terrain: false,
+      terrainControl: false
+    });
+
+    const pin = document.createElement('div');
+    pin.className = 'lee-pin';
+
+    const marker = new maptilersdk.Marker({ element: pin, anchor: 'bottom', draggable: true })
+      .setLngLat(defaultCenter)
+      .addTo(map);
+
+    const popup = new maptilersdk.Popup({
+      className: 'lee-popup',
+      closeButton: false,
+      closeOnClick: false,
+      offset: 18,
+      anchor: 'top'
+    }).setHTML('<div class="map-card"><div class="map-card-title">Selected location</div><div class="map-card-body">Chicago, IL</div></div>');
+
+    marker.setPopup(popup).togglePopup();
+
+    const popupState = { title: 'Selected location', body: 'Chicago, IL' };
+
+    const syncPopup = () => {
+      const el = popup.getElement();
+      if (!el) return;
+      const titleEl = el.querySelector('.map-card-title');
+      const bodyEl = el.querySelector('.map-card-body');
+      if (titleEl) titleEl.textContent = popupState.title;
+      if (bodyEl) bodyEl.textContent = popupState.body;
+    };
+
+    popup.on?.('open', syncPopup);
+    syncPopup();
+
+    const coordsToText = (lngLat) => {
+      if (!lngLat) return '';
+      const { lng, lat } = lngLat;
+      return `Lat ${lat.toFixed(5)}\u00b0, Lng ${lng.toFixed(5)}\u00b0`;
+    };
+
+    const setPopupContent = (title, body) => {
+      popupState.title = title || 'Selected location';
+      popupState.body = body || '';
+      syncPopup();
+    };
+
+    const updateCardForCoords = (lngLat, label) => {
+      setPopupContent(label || 'Selected location', coordsToText(lngLat));
+    };
+
+    marker.on('dragend', () => {
+      updateCardForCoords(marker.getLngLat(), 'Dropped pin');
+    });
+
+    const debounce = (fn, ms) => {
+      let timer;
+      return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+      };
+    };
+
+    const geocodeForward = async (query) => {
+      if (!query) return;
+      const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json?limit=1&country=US&key=${MAPTILER_KEY}`;
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        const data = await res.json();
+        const feat = data?.features?.[0];
+        const coords = feat?.center || feat?.geometry?.coordinates;
+        if (Array.isArray(coords)) {
+          map.flyTo({ center: coords, zoom: 15, duration: 700 });
+          marker.setLngLat(coords);
+          const placeName = feat?.place_name || query;
+          setPopupContent('Selected location', placeName);
+        } else {
+          setPopupContent('No match found', 'Try another address');
+        }
+      } catch (err) {
+        console.warn('Geocoding failed:', err);
+        setPopupContent('Geocoding unavailable', 'Please try again later.');
+      }
+    };
+
+    const addressInput = document.getElementById('suite');
+    if (addressInput) {
+      const trigger = debounce(() => geocodeForward(addressInput.value.trim()), 350);
+      addressInput.addEventListener('input', trigger);
+      addressInput.addEventListener('change', () => geocodeForward(addressInput.value.trim()));
+    }
+
+    const toggle = document.getElementById('mapToggle');
+    if (toggle && !toggle.querySelector('[data-mode]')) {
+      toggle.innerHTML = `
+        <button type="button" class="toggle active" data-mode="2d" aria-pressed="true">2D</button>
+        <button type="button" class="toggle" data-mode="3d" aria-pressed="false">3D</button>
+      `;
+    }
+
+    const btn2D = toggle?.querySelector('[data-mode="2d"]');
+    const btn3D = toggle?.querySelector('[data-mode="3d"]');
+
+    const setActive = (on, off) => {
+      if (on) {
+        on.classList.add('active');
+        on.setAttribute('aria-pressed', 'true');
+      }
+      if (off) {
+        off.classList.remove('active');
+        off.setAttribute('aria-pressed', 'false');
+      }
+    };
+
+    const to2D = () => {
+      if (typeof map.isTerrainEnabled === 'function' && map.isTerrainEnabled()) {
+        map.disableTerrain();
+      }
+      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+      setActive(btn2D, btn3D);
+    };
+
+    const to3D = () => {
+      if (!map.isTerrainEnabled || !map.isTerrainEnabled()) {
+        map.enableTerrain({ exaggeration: 1.0 });
+      }
+      map.easeTo({ pitch: 65, duration: 800 });
+      setActive(btn3D, btn2D);
+    };
+
+    btn2D?.addEventListener('click', to2D);
+    btn3D?.addEventListener('click', to3D);
+    to2D();
+  }
+
+  window.addEventListener('load', initMap);
+
   // -- Commissions & NPV chip (define once, top-level) -------------------------
   function updateCommNpvChip() {
     const pct = (rawPercentFromInput('brokerCommission') || 0) * 100; // 0..100
