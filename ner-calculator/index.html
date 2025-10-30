@@ -225,7 +225,7 @@
 <!-- Services spans the row already -->
 <div class="section-head col-span-4" id="sec-services">
   <h3 class="section-title">Services</h3>
-  <p class="section-sub">NNN, MG (stop), Gross, or Custom</p>
+  <p class="section-sub">NNN, Modified Gross, or Gross</p>
 </div>
 
 <!-- Services (full row) -->
@@ -233,9 +233,8 @@
   <label for="serviceType">Services</label>
   <select id="serviceType" class="select-filled">
     <option value="nnn" selected>NNN (Base + Taxes + CAM + Insurance)</option>
-    <option value="mg_stop">Modified Gross — Base-Year Stop</option>
+    <option value="mg">Modified Gross</option>
     <option value="gross">Gross (Base only)</option>
-    <option value="custom">Custom</option>
   </select>
 </div>
 
@@ -299,6 +298,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <!-- Advanced row (spans all 4 columns) -->
@@ -413,6 +427,21 @@
     </small>
   </div>
 
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Advanced row -->
   <div class="opx-adv col-1-4" data-for="cam" hidden>
     <div class="adv-grid">
@@ -525,6 +554,21 @@
     </small>
   </div>
 
+  <div class="opx-stop" data-for="ins" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="insStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="insStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="insStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
 <!-- ========================== Management Fee ========================== -->
 <div class="opx opx-row" data-kind="mgmt" id="mgmtRow">
   <div class="field col-1-2">
@@ -540,14 +584,26 @@
     </div>
     <small class="hint">Applied to monthly rent before the fee itself.</small>
   </div>
+
+  <div class="field col-1-2">
+    <label for="mgmtMode">Responsibility</label>
+    <select id="mgmtMode" class="select-filled">
+      <option value="tenant">Tenant pays 100%</option>
+      <option value="stop">Base-year stop (increases only)</option>
+      <option value="landlord">Landlord pays 100%</option>
+    </select>
+    <small class="hint">Controls who bears the management fee each period.</small>
+  </div>
 </div>
 
-
-  <!-- right column kept for grid symmetry (empty like others) -->
-  <div class="field col-3-4">
-    <label class="right">&nbsp;</label>
-    <div class="input-with-addon"></div>
+<div class="field col-1-2" id="mgmtBaseWrap" style="display:none;">
+  <label for="mgmtBase">Management Fee Base-year ($/SF/yr)</label>
+  <div class="input-with-addon">
+    <span class="addon">$</span>
+    <input id="mgmtBase" type="text" inputmode="decimal" data-format="money" placeholder="leave blank to auto" />
+    <span class="addon">/SF/yr</span>
   </div>
+  <small class="hint">If blank, we’ll auto-set to the first full lease year.</small>
 </div>
 
   <!-- Advanced row -->
@@ -602,7 +658,7 @@
 </div>
 
 
-<section id="customExpSection" class="opx-group col-span-4 hidden" aria-label="Custom expenses">
+<section id="customExpSection" class="opx-group col-span-4" aria-label="Custom expenses">
   <div class="opx-head">
     <h4>Additional Operating Expenses</h4>
     <button id="addCustomExp" type="button" class="btn small">+ Add expense</button>
@@ -654,6 +710,23 @@
             <option value="stop">Base-year stop (increases only)</option>
             <option value="landlord">Landlord pays</option>
           </select>
+        </div>
+      </div>
+
+      <div class="field" style="display:none;" data-stop-type>
+        <label>Stop Type</label>
+        <select class="cx-stopType select-filled">
+          <option value="base" selected>Base-year</option>
+          <option value="fixed">Fixed stop</option>
+        </select>
+      </div>
+
+      <div class="field cx-stopPSF-wrap" style="display:none;">
+        <label>Fixed Stop ($/SF/yr)</label>
+        <div class="input-with-addon">
+          <span class="addon">$</span>
+          <input type="text" class="cx-stopPSF" inputmode="decimal" placeholder="0.00" />
+          <span class="addon">/SF/yr</span>
         </div>
       </div>
 
