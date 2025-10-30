@@ -88,42 +88,48 @@
       closeOnClick: false,
       offset: 18,
       anchor: 'top'
-    }).setHTML('<div class="map-card"><div class="map-card-title">Selected location</div><div class="map-card-body">Chicago, IL</div></div>');
+    });
+
+    const buildPopupHTML = (title, body) => `
+      <div class="map-card">
+        <div class="map-card-title">${title}</div>
+        <div class="map-card-body">${body}</div>
+      </div>
+    `;
+
+    const formatCoords = ([lng, lat]) => `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+    async function reverseGeocode([lng, lat]) {
+      const fallback = formatCoords([lng, lat]);
+      try {
+        const url = `https://api.maptiler.com/geocoding/${lng},${lat}.json?limit=1&key=${MAPTILER_KEY}`;
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const feat = data?.features?.[0];
+        return feat?.place_name || feat?.text || fallback;
+      } catch (err) {
+        console.warn('Reverse geocode failed:', err);
+        return fallback;
+      }
+    }
+
+    let popupRequestId = 0;
+    const updatePopupFromCoords = (title, coords, interim) => {
+      const reqId = ++popupRequestId;
+      popup.setHTML(buildPopupHTML(title, interim || 'Resolving address…'));
+      reverseGeocode(coords).then((addr) => {
+        if (popupRequestId !== reqId) return;
+        popup.setHTML(buildPopupHTML(title, addr));
+      });
+    };
 
     marker.setPopup(popup).togglePopup();
-
-    const popupState = { title: 'Selected location', body: 'Chicago, IL' };
-
-    const syncPopup = () => {
-      const el = popup.getElement();
-      if (!el) return;
-      const titleEl = el.querySelector('.map-card-title');
-      const bodyEl = el.querySelector('.map-card-body');
-      if (titleEl) titleEl.textContent = popupState.title;
-      if (bodyEl) bodyEl.textContent = popupState.body;
-    };
-
-    popup.on?.('open', syncPopup);
-    syncPopup();
-
-    const coordsToText = (lngLat) => {
-      if (!lngLat) return '';
-      const { lng, lat } = lngLat;
-      return `Lat ${lat.toFixed(5)}\u00b0, Lng ${lng.toFixed(5)}\u00b0`;
-    };
-
-    const setPopupContent = (title, body) => {
-      popupState.title = title || 'Selected location';
-      popupState.body = body || '';
-      syncPopup();
-    };
-
-    const updateCardForCoords = (lngLat, label) => {
-      setPopupContent(label || 'Selected location', coordsToText(lngLat));
-    };
+    updatePopupFromCoords('Selected location', defaultCenter);
 
     marker.on('dragend', () => {
-      updateCardForCoords(marker.getLngLat(), 'Dropped pin');
+      const { lng, lat } = marker.getLngLat();
+      updatePopupFromCoords('Dropped pin', [lng, lat]);
     });
 
     const debounce = (fn, ms) => {
@@ -146,13 +152,13 @@
           map.flyTo({ center: coords, zoom: 15, duration: 700 });
           marker.setLngLat(coords);
           const placeName = feat?.place_name || query;
-          setPopupContent('Selected location', placeName);
+          updatePopupFromCoords('Selected location', coords, placeName);
         } else {
-          setPopupContent('No match found', 'Try another address');
+          popup.setHTML(buildPopupHTML('No match found', 'Try another address'));
         }
       } catch (err) {
         console.warn('Geocoding failed:', err);
-        setPopupContent('Geocoding unavailable', 'Please try again later.');
+        popup.setHTML(buildPopupHTML('Geocoding unavailable', 'Please try again later.'));
       }
     };
 
@@ -163,47 +169,11 @@
       addressInput.addEventListener('change', () => geocodeForward(addressInput.value.trim()));
     }
 
-    const toggle = document.getElementById('mapToggle');
-    if (toggle && !toggle.querySelector('[data-mode]')) {
-      toggle.innerHTML = `
-        <button type="button" class="toggle active" data-mode="2d" aria-pressed="true">2D</button>
-        <button type="button" class="toggle" data-mode="3d" aria-pressed="false">3D</button>
-      `;
-    }
-
-    const btn2D = toggle?.querySelector('[data-mode="2d"]');
-    const btn3D = toggle?.querySelector('[data-mode="3d"]');
-
-    const setActive = (on, off) => {
-      if (on) {
-        on.classList.add('active');
-        on.setAttribute('aria-pressed', 'true');
-      }
-      if (off) {
-        off.classList.remove('active');
-        off.setAttribute('aria-pressed', 'false');
-      }
-    };
-
-    const to2D = () => {
-      if (typeof map.isTerrainEnabled === 'function' && map.isTerrainEnabled()) {
-        map.disableTerrain();
-      }
-      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
-      setActive(btn2D, btn3D);
-    };
-
-    const to3D = () => {
-      if (!map.isTerrainEnabled || !map.isTerrainEnabled()) {
-        map.enableTerrain({ exaggeration: 1.0 });
-      }
-      map.easeTo({ pitch: 65, duration: 800 });
-      setActive(btn3D, btn2D);
-    };
-
-    btn2D?.addEventListener('click', to2D);
-    btn3D?.addEventListener('click', to3D);
-    to2D();
+    map.on('click', (e) => {
+      const coords = [e.lngLat.lng, e.lngLat.lat];
+      marker.setLngLat(coords);
+      updatePopupFromCoords('Dropped pin', coords);
+    });
   }
 
   window.addEventListener('load', initMap);

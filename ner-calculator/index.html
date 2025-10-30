@@ -68,6 +68,9 @@
     border-radius: 50%;
     box-shadow: 0 8px 18px rgba(0,0,0,.35);
     position: relative;
+    display: block;
+    pointer-events: none;
+    transform: none;
   }
 
   .lee-pin::after {
@@ -138,7 +141,6 @@
       <div class="field span-all">
         <label class="right" style="visibility:hidden">Map</label>
         <div id="map" class="map"></div>
-        <div id="mapToggle" class="map-toggle"></div>
         <small class="hint">Map centers automatically from the Property Address.</small>
       </div>
 
@@ -355,6 +357,21 @@
     </div>
   </div>
 
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Advanced row (spans all 4 columns) -->
   <div class="opx-adv col-1-4" data-for="taxes" hidden>
     <div class="adv-grid">
@@ -465,6 +482,21 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="cam" style="display:none;">
