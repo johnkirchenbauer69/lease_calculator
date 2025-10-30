@@ -1004,6 +1004,26 @@
       ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
     });
 
+    [
+      ['taxesStopType', 'taxes'],
+      ['camStopType', 'cam'],
+      ['insStopType', 'ins']
+    ].forEach(([id, kind]) => {
+      const sel = document.getElementById(id);
+      if (sel) {
+        sel.addEventListener('change', () => {
+          updateOpexLabels(kind);
+          calculate();
+        });
+      }
+    });
+
+    ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(id => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
+    });
+
     // initial
     updateOpexLabels('taxes'); updateOpexLabels('cam'); updateOpexLabels('ins');
   }
