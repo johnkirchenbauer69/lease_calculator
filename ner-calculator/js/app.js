@@ -1004,26 +1004,6 @@
       ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
     });
 
-    [
-      ['taxesStopType', 'taxes'],
-      ['camStopType', 'cam'],
-      ['insStopType', 'ins']
-    ].forEach(([id, kind]) => {
-      const sel = document.getElementById(id);
-      if (sel) {
-        sel.addEventListener('change', () => {
-          updateOpexLabels(kind);
-          calculate();
-        });
-      }
-    });
-
-    ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(id => {
-      const input = document.getElementById(id);
-      if (!input) return;
-      ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
-    });
-
     // initial
     updateOpexLabels('taxes'); updateOpexLabels('cam'); updateOpexLabels('ins');
   }
@@ -2521,22 +2501,17 @@
     };
   }
 
-  function renderScheduleTable(model, perspective, table, thead, tbody) {
-    const rows = perspective === 'tenant'
+  function buildMonthlyRows(model, perspective) {
+    return perspective === 'tenant'
       ? buildTenantSchedule(model)
       : buildLandlordSchedule(model);
+  }
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      thead.innerHTML = '';
-      tbody.innerHTML = '';
-      return;
-    }
-
+  function buildMonthlyColumns(model, perspective) {
     const coreModes = model?.coreOpExModes || {};
     const coreStopTypes = model?.coreOpExStopTypes || {};
     const normalizeMode = (mode) => (mode || '').toLowerCase();
     const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
-    const scheduleRaw = Array.isArray(model?.schedule) ? model.schedule : [];
     const hasOther = !!model?.hasOtherOpEx;
     const customExpenses = Array.isArray(model?.customExpenses) ? model.customExpenses : [];
 
@@ -2684,8 +2659,10 @@
       { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
     );
 
-    const schema = (perspective === 'tenant') ? tenantColumns : landlordColumns;
+    return (perspective === 'tenant') ? tenantColumns : landlordColumns;
+  }
 
+  function renderTableHeader(schema, thead) {
     thead.innerHTML = '';
     const headerRow = document.createElement('tr');
     schema.forEach(col => {
@@ -2695,9 +2672,24 @@
       headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
+  }
+
+  function renderScheduleTable(model, perspective, table, thead, tbody) {
+    const rows = buildMonthlyRows(model, perspective);
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+      return;
+    }
+
+    const schema = buildMonthlyColumns(model, perspective);
+
+    renderTableHeader(schema, thead);
 
     tbody.innerHTML = '';
     const totals = new Array(schema.length).fill(0);
+    const sumFns = schema.map(col => (typeof col.sum === 'function') ? col.sum : null);
 
     rows.forEach(row => {
       const tr = document.createElement('tr');
@@ -2705,8 +2697,8 @@
         const td = document.createElement('td');
         td.textContent = col.render(row);
         tr.appendChild(td);
-        if (typeof col.sum === 'function') {
-          totals[idx] += Number(col.sum(row) || 0);
+        if (sumFns[idx]) {
+          totals[idx] += Number(sumFns[idx](row) || 0);
         }
       });
       tbody.appendChild(tr);
@@ -2718,7 +2710,7 @@
       const td = document.createElement('td');
       if (idx === 0) {
         td.textContent = 'Grand Total';
-      } else if (typeof col.sum === 'function') {
+      } else if (sumFns[idx]) {
         td.textContent = fmtUSD(totals[idx]);
       } else {
         td.textContent = '—';
@@ -2898,171 +2890,84 @@ function renderMonthlyWithSubtotals(data, table, thead, tbody) {
   table.classList.remove('annual-view');
   table.classList.add('monthly-sub-view');
 
-  const hasOther = !!data.hasOtherOpEx;
-  const hasMgmt  = (data.mgmt?.ratePct || 0) > 0;
-  const includeGross = includeOpExInGross(activePerspective === 'tenant' ? 'tenant' : 'landlord', data.serviceType);
+  const perspective = activePerspective || 'landlord';
+  const rows = buildMonthlyRows(data, perspective);
 
-  const isTenantView = (activePerspective || '').toLowerCase() === 'tenant';
-  const labelForTenant = (txt) => {
-    if (!isTenantView) return txt;
-    return (String(txt || '').toLowerCase() === 'recovered') ? 'Tenant-Paid' : txt;
-  };
+  if (!Array.isArray(rows) || rows.length === 0) {
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+    return;
+  }
 
-  // Dynamic payer badges under each OpEx header
-  const taxTag = hdrBadge(labelForTenant(payerLabel(data.schedule, 'taxes')));
-  const camTag = hdrBadge(labelForTenant(payerLabel(data.schedule, 'cam')));
-  const insTag = hdrBadge(labelForTenant(payerLabel(data.schedule, 'ins')));
-  const othTag = hasOther ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'other'))) : '';
-  const mgmTag = hasMgmt  ? hdrBadge(labelForTenant(payerLabel(data.schedule, 'mgmt')))  : '';
-
-  const serviceType = (data.serviceType || '').toLowerCase();
-  const coreModes = data.coreOpExModes || {};
-  const coreStopTypes = data.coreOpExStopTypes || {};
-  const normalizeMode = (mode) => (mode || '').toLowerCase();
-  const stopTypeFor = (key) => (coreStopTypes[key] || 'base').toLowerCase();
-  const labelWithStop = (base, key) => {
-    const mode = normalizeMode(coreModes[key]);
-    const isStop = (serviceType === 'mg') || mode === 'stop';
-    if (!isStop) return `${base} ($/SF/yr)`;
-    const suffix = stopTypeFor(key) === 'fixed' ? 'Over Fixed Stop' : 'Over Base';
-    return `${base} ${suffix} ($/SF/yr)`;
-  };
-
-  const taxesHeaderLabel = labelWithStop('Taxes', 'taxes');
-  const camHeaderLabel = labelWithStop('CAM', 'cam');
-  const insHeaderLabel = labelWithStop('Insurance', 'ins');
-  const mgmtBaseLabel = `Mgmt Fee (${data.mgmt?.appliedOn === 'net' ? 'on Net' : 'on Gross'})`;
-  const mgmtHeaderLabel = (normalizeMode(coreModes.mgmt) === 'stop')
-    ? `${mgmtBaseLabel} ${stopTypeFor('mgmt') === 'fixed' ? 'Over Fixed Stop' : 'Over Base'} ($/SF/yr)`
-    : `${mgmtBaseLabel} ($/SF/yr)`;
-
-  thead.innerHTML = `<tr>
-    <th>Period</th>
-    <th>Year</th>
-    <th>Month</th>
-    <th>Space Size (SF)</th>
-    <th>Net Rent ($/SF/yr)</th>
-    <th>${taxesHeaderLabel}${taxTag}</th>
-    <th>${camHeaderLabel}${camTag}</th>
-    <th>${insHeaderLabel}${insTag}</th>
-    ${hasOther ? `<th>Other ($/SF/yr)${othTag}</th>` : ''}
-    ${hasMgmt  ? `<th>${mgmtHeaderLabel}${mgmTag}</th>` : ''}
-    <th>Gross Rent ($/SF/yr)</th>
-    <th>Net Rent (Total)</th>
-    <th>Gross Rent (Total)</th>
-  </tr>`;
+  const schema = buildMonthlyColumns(data, perspective);
+  renderTableHeader(schema, thead);
 
   tbody.innerHTML = '';
 
-  // Per-year bins + grand totals
-  let currentYear = null;
-  let yNet = 0, yGross = 0;
-  let grandNet = 0, grandGross = 0;
+  const sumFns = schema.map(col => (typeof col.sum === 'function') ? col.sum : null);
+  const grandTotals = new Array(schema.length).fill(0);
+  let yearTotals = new Array(schema.length).fill(0);
 
-  const flushYearSubtotal = () => {
-    if (currentYear == null) return;
-
-    const headCols  = thead.querySelectorAll('th').length;
-    const labelSpan = Math.max(headCols - 2, 1);
-
-    const sub = document.createElement('tr');
-    sub.classList.add('subtotal-row');
-
-    const tdLabel = document.createElement('td');
-    tdLabel.colSpan = labelSpan;
-    tdLabel.textContent = `Subtotal ${currentYear}`;
-    sub.appendChild(tdLabel);
-
-    const tdNet = document.createElement('td');
-    tdNet.textContent = fmtUSD(yNet);
-    sub.appendChild(tdNet);
-
-    const tdGross = document.createElement('td');
-    tdGross.textContent = fmtUSD(yGross);
-    sub.appendChild(tdGross);
-
-    tbody.appendChild(sub);
-
-    yNet = 0;
-    yGross = 0;
+  const appendDataRow = (row) => {
+    const tr = document.createElement('tr');
+    schema.forEach((col, idx) => {
+      const td = document.createElement('td');
+      td.textContent = col.render(row);
+      tr.appendChild(td);
+      if (sumFns[idx]) {
+        const val = Number(sumFns[idx](row) || 0);
+        grandTotals[idx] += val;
+        yearTotals[idx] += val;
+      }
+    });
+    tbody.appendChild(tr);
   };
 
-  // Render month rows
-  data.schedule.forEach(r => {
-    if (currentYear === null) currentYear = r.calYear;
-    if (r.calYear !== currentYear) {
-      flushYearSubtotal();
-      currentYear = r.calYear;
-    }
-
-    // $/SF/yr values (tenant-paid, post-abatement)
-    const netAnn  = r.isGrossAbated ? 0 : r.contractNetAnnualPSF;
-    const taxAnn  = r.isGrossAbated ? 0 : r.contractTaxesAnnualPSF;
-    const camAnn  = r.isGrossAbated ? 0 : r.contractCamAnnualPSF;
-    const insAnn  = r.isGrossAbated ? 0 : r.contractInsAnnualPSF;
-    const othAnn  = hasOther ? (r.isGrossAbated ? 0 : (r.contractOtherAnnualPSF || 0)) : 0;
-    const mgmtAnn = hasMgmt  ? (r.isGrossAbated ? 0 : (r.contractMgmtAnnualPSF || 0)) : 0;
-
-    const grossAnn = includeGross
-      ? netAnn + taxAnn + camAnn + insAnn + othAnn + (hasMgmt ? mgmtAnn : 0)
-      : netAnn;
-
+  const flushSubtotal = (year) => {
+    if (year == null) return;
     const tr = document.createElement('tr');
-    const cells = [
-      r.monthIndex,
-      r.calYear,
-      r.calMonth,
-      data.area.toLocaleString(),
-      fmtUSD(netAnn),
-      fmtUSD(taxAnn),
-      fmtUSD(camAnn),
-      fmtUSD(insAnn)
-    ];
-    if (hasOther) cells.push(fmtUSD(othAnn));
-    if (hasMgmt)  cells.push(fmtUSD(mgmtAnn));
-    const grossTotalForRow = includeGross ? (r.grossTotal || 0) : (r.netTotal || 0);
-    cells.push(fmtUSD(grossAnn), fmtUSD(r.netTotal), fmtUSD(grossTotalForRow));
-
-    cells.forEach(v => {
+    tr.classList.add('subtotal-row');
+    schema.forEach((col, idx) => {
       const td = document.createElement('td');
-      td.textContent = v;
+      if (idx === 0) {
+        td.textContent = `Subtotal ${year}`;
+      } else if (sumFns[idx]) {
+        td.textContent = fmtUSD(yearTotals[idx]);
+      } else {
+        td.textContent = '—';
+      }
       tr.appendChild(td);
     });
-
-    if (r.isGrossAbated) tr.classList.add('gross-abated');
     tbody.appendChild(tr);
+    yearTotals = new Array(schema.length).fill(0);
+  };
 
-    // Totals
-    yNet       += (r.netTotal   || 0);
-    yGross     += grossTotalForRow;
-    grandNet   += (r.netTotal   || 0);
-    grandGross += grossTotalForRow;
+  let currentYear = rows[0]?.year ?? null;
+
+  rows.forEach(row => {
+    if (currentYear !== null && row.year !== currentYear) {
+      flushSubtotal(currentYear);
+      currentYear = row.year;
+    }
+    appendDataRow(row);
   });
 
-  // Final year subtotal
-  flushYearSubtotal();
+  flushSubtotal(currentYear);
 
-  // Grand Total
-  const headCols  = thead.querySelectorAll('th').length;
-  const labelSpan = Math.max(headCols - 2, 1);
-
-  const gt = document.createElement('tr');
-  gt.classList.add('grand-total');
-
-  const tdLabel = document.createElement('td');
-  tdLabel.colSpan = labelSpan;
-  tdLabel.textContent = 'Grand Total';
-  gt.appendChild(tdLabel);
-
-  const tdNet = document.createElement('td');
-  tdNet.textContent = fmtUSD(grandNet);
-  gt.appendChild(tdNet);
-
-  const tdGross = document.createElement('td');
-  tdGross.textContent = fmtUSD(grandGross);
-  gt.appendChild(tdGross);
-
-  tbody.appendChild(gt);
+  const grandRow = document.createElement('tr');
+  grandRow.classList.add('grand-total');
+  schema.forEach((col, idx) => {
+    const td = document.createElement('td');
+    if (idx === 0) {
+      td.textContent = 'Grand Total';
+    } else if (sumFns[idx]) {
+      td.textContent = fmtUSD(grandTotals[idx]);
+    } else {
+      td.textContent = '—';
+    }
+    grandRow.appendChild(td);
+  });
+  tbody.appendChild(grandRow);
 }
 
   // ------------------------------- Exports buttons (optional) -----------------
