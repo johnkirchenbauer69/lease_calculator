@@ -1305,7 +1305,7 @@
       };
 
       const extraOpExRows = readAdditionalOpEx();
-      const hasOtherOpEx = extraOpExRows.length > 0;
+      let hasOtherOpEx = false;
 
       const taxesGrowthRaw = rawNumberFromInput($('#taxesGrowth'));
       const camGrowthRaw = rawNumberFromInput($('#camGrowth'));
@@ -1526,6 +1526,8 @@
       const mgmtStopBaseAnn = (mgmtMode === 'stop')
         ? (mgmtCfg.baseAnnual != null && mgmtCfg.baseAnnual > 0 ? mgmtCfg.baseAnnual : autoMgmtBaseAnn)
         : 0;
+
+      let totalOtherAnnualPSF = 0;
 
       for (let m = 1; m <= scheduleMonths; m++) {
         const rowDate = new Date(startDate.getFullYear(), startDate.getMonth() + (m - 1), 1);
@@ -1831,8 +1833,16 @@
           other: otherLLMoPSF * 12
         };
 
+        row.otherPSF = row.tenPSF.other + row.llPSF.other;
+        row.otherMonthly$Tenant = tenOth$;
+        row.otherMonthly$LL = llOth$;
+
+        totalOtherAnnualPSF += row.otherPSF;
+
         schedule.push(row);
       }
+
+      hasOtherOpEx = totalOtherAnnualPSF > 0;
 
       // -----------------------------------------------------------------------
       // KPIs (PV & simple)
@@ -2168,12 +2178,14 @@
       const mgmt$ = Number(row.tenantMgmt$) || 0;
       const customItems = Array.isArray(row.customItems) ? row.customItems : [];
       const customTenant$ = customItems.reduce((sum, item) => sum + (Number(item.tenantDollars) || 0), 0);
+      const other$ = Number(row.tenantOther$) || customTenant$ || 0;
 
       const baseRentPSF = annualPSFFromDollars(base$, area, cashFactor);
       const taxesPSF = annualPSFFromDollars(taxes$, area, cashFactor);
       const camPSF = annualPSFFromDollars(cam$, area, cashFactor);
       const insPSF = annualPSFFromDollars(ins$, area, cashFactor);
       const mgmtPSF = annualPSFFromDollars(mgmt$, area, cashFactor);
+      const otherPSF = annualPSFFromDollars(other$, area, cashFactor);
 
       const displayGross$ = includeGross
         ? grossRaw$
@@ -2199,9 +2211,11 @@
         camPSF,
         insPSF,
         mgmtPSF,
+        otherPSF,
         grossPSF,
         monthlyNet$: base$,
         monthlyGross$: displayGross$,
+        otherMonthly$Tenant: other$,
         totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
         opEx: row.opEx,
         customItems: row.customItems
@@ -2251,6 +2265,7 @@
       const llIns$ = Number(row.llIns$) || 0;
       const llMgmt$ = Number(row.llMgmt$) || 0;
       const llOther$ = Number(row.llOther$) || 0;
+      const otherTenant$ = Number(row.tenantOther$) || 0;
 
       const landlordOpEx = llTaxes$ + llCam$ + llIns$ + llOther$ + llMgmt$ + customLandlordBurden;
       const freeRent = Number(row.freeBase$) || 0;
@@ -2267,6 +2282,7 @@
       const taxesPSF_LL = annualPSFFromDollars(llTaxes$, area, cashFactor);
       const camPSF_LL = annualPSFFromDollars(llCam$, area, cashFactor);
       const insPSF_LL = annualPSFFromDollars(llIns$, area, cashFactor);
+      const otherPSF_LL = annualPSFFromDollars(llOther$, area, cashFactor);
       const mgmtPSF_LL = annualPSFFromDollars(llMgmt$, area, cashFactor);
       const grossPSF_LL = annualPSFFromDollars(displayGross$, area, cashFactor);
 
@@ -2297,10 +2313,14 @@
         camPSF_LL,
         insPSF_LL,
         mgmtPSF_LL,
+        otherPSF: otherPSF_LL,
+        otherPSF_LL,
         grossPSF_LL,
         monthlyNet$,
         monthlyGross$,
         baseCollected: baseCollected$,
+        otherMonthly$Tenant: otherTenant$,
+        otherMonthly$LL: llOther$,
         totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
         recoveries: {
           taxes: taxesRecovery,
@@ -2347,8 +2367,18 @@
     const serviceType = (model?.serviceType || '').toLowerCase();
     const coreModes = model?.coreOpExModes || {};
     const normalizeMode = (mode) => (mode || '').toLowerCase();
+    const scheduleRaw = Array.isArray(model?.schedule) ? model.schedule : [];
+    const hasOther = !!model?.hasOtherOpEx;
 
-    const tenantSchemaBase = [
+    const taxTag = hdrBadge(payerLabel(scheduleRaw, 'taxes'));
+    const camTag = hdrBadge(payerLabel(scheduleRaw, 'cam'));
+    const insTag = hdrBadge(payerLabel(scheduleRaw, 'ins'));
+    const mgmTag = hdrBadge(payerLabel(scheduleRaw, 'mgmt'));
+    const othTag = hasOther ? hdrBadge(payerLabel(scheduleRaw, 'other')) : '';
+
+    const otherLabelBase = 'Other OpEx ($/SF/yr)';
+
+    const tenantColumns = [
       { key: 'period', label: 'Period', render: r => r.period },
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
@@ -2356,55 +2386,92 @@
       { key: 'baseRentPSF', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF || 0) }
     ];
 
-    const tenantOpCols = [
-      { key: 'taxesPSF', base: 'Taxes', mode: coreModes.taxes },
-      { key: 'camPSF', base: 'CAM', mode: coreModes.cam },
-      { key: 'insPSF', base: 'Insurance', mode: coreModes.ins },
-      { key: 'mgmtPSF', base: 'Management Fee', mode: coreModes.mgmt }
-    ];
+    const showTaxesTenant = rows.some(r => Math.abs(Number(r.taxesPSF || 0)) > 1e-9);
+    const showCamTenant = rows.some(r => Math.abs(Number(r.camPSF || 0)) > 1e-9);
+    const showInsTenant = rows.some(r => Math.abs(Number(r.insPSF || 0)) > 1e-9);
+    const showOtherTenant = hasOther && rows.some(r => Math.abs(Number(r.otherPSF || 0)) > 1e-9);
+    const showMgmtTenant = rows.some(r => Math.abs(Number(r.mgmtPSF || 0)) > 1e-9);
 
-    const tenantTail = [
+    const pushTenantCol = (opts) => {
+      const labelText = opts.label;
+      const headerHTML = opts.badge ? `${labelText}${opts.badge}` : labelText;
+      tenantColumns.push({
+        key: opts.key,
+        label: labelText,
+        headerHTML,
+        render: r => fmtUSD(Number(r[opts.key] || 0))
+      });
+    };
+
+    if (showTaxesTenant) {
+      const label = (serviceType === 'mg_stop' || normalizeMode(coreModes.taxes) === 'stop')
+        ? 'Taxes Over Base ($/SF/yr)'
+        : 'Taxes ($/SF/yr)';
+      pushTenantCol({ key: 'taxesPSF', label, badge: taxTag });
+    }
+    if (showCamTenant) {
+      const label = (serviceType === 'mg_stop' || normalizeMode(coreModes.cam) === 'stop')
+        ? 'CAM Over Base ($/SF/yr)'
+        : 'CAM ($/SF/yr)';
+      pushTenantCol({ key: 'camPSF', label, badge: camTag });
+    }
+    if (showInsTenant) {
+      const label = (serviceType === 'mg_stop' || normalizeMode(coreModes.ins) === 'stop')
+        ? 'Insurance Over Base ($/SF/yr)'
+        : 'Insurance ($/SF/yr)';
+      pushTenantCol({ key: 'insPSF', label, badge: insTag });
+    }
+    if (showOtherTenant) {
+      pushTenantCol({ key: 'otherPSF', label: otherLabelBase, badge: othTag });
+    }
+    if (showMgmtTenant) {
+      const label = (normalizeMode(coreModes.mgmt) === 'stop')
+        ? 'Management Fee Over Base ($/SF/yr)'
+        : 'Management Fee ($/SF/yr)';
+      pushTenantCol({ key: 'mgmtPSF', label, badge: mgmTag });
+    }
+
+    tenantColumns.push(
       { key: 'grossPSF', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF || 0) },
       { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
       { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
-    ];
+    );
 
-    const landlordSchema = [
+    const landlordColumns = [
       { key: 'period', label: 'Period', render: r => r.period },
       { key: 'year', label: 'Year', render: r => r.year },
       { key: 'month', label: 'Month', render: r => r.month },
       { key: 'spaceSize', label: 'Space Size (SF)', render: r => (Number(r.spaceSize || 0)).toLocaleString() },
       { key: 'baseRentPSF_LL', label: 'Base Rent ($/SF/yr)', render: r => fmtUSD(r.baseRentPSF_LL || 0) },
-      { key: 'taxesPSF_LL', label: 'Taxes ($/SF/yr)', render: r => fmtUSD(r.taxesPSF_LL || 0) },
-      { key: 'camPSF_LL', label: 'CAM ($/SF/yr)', render: r => fmtUSD(r.camPSF_LL || 0) },
-      { key: 'insPSF_LL', label: 'Insurance ($/SF/yr)', render: r => fmtUSD(r.insPSF_LL || 0) },
-      { key: 'mgmtPSF_LL', label: 'Management Fee ($/SF/yr)', render: r => fmtUSD(r.mgmtPSF_LL || 0) },
+      { key: 'taxesPSF_LL', label: 'Taxes ($/SF/yr)', headerHTML: taxTag ? `Taxes ($/SF/yr)${taxTag}` : undefined, render: r => fmtUSD(r.taxesPSF_LL || 0) },
+      { key: 'camPSF_LL', label: 'CAM ($/SF/yr)', headerHTML: camTag ? `CAM ($/SF/yr)${camTag}` : undefined, render: r => fmtUSD(r.camPSF_LL || 0) },
+      { key: 'insPSF_LL', label: 'Insurance ($/SF/yr)', headerHTML: insTag ? `Insurance ($/SF/yr)${insTag}` : undefined, render: r => fmtUSD(r.insPSF_LL || 0) }
+    ];
+
+    if (hasOther) {
+      landlordColumns.push({
+        key: 'otherPSF',
+        label: otherLabelBase,
+        headerHTML: othTag ? `${otherLabelBase}${othTag}` : undefined,
+        render: r => fmtUSD(Number(r.otherPSF || 0))
+      });
+    }
+
+    landlordColumns.push(
+      { key: 'mgmtPSF_LL', label: 'Management Fee ($/SF/yr)', headerHTML: mgmTag ? `Management Fee ($/SF/yr)${mgmTag}` : undefined, render: r => fmtUSD(r.mgmtPSF_LL || 0) },
       { key: 'grossPSF_LL', label: 'Gross Rent ($/SF/yr)', render: r => fmtUSD(r.grossPSF_LL || 0) },
       { key: 'monthlyNet$', label: 'Monthly Net Rent ($)', render: r => fmtUSD(r.monthlyNet$ || 0), sum: r => r.monthlyNet$ || 0 },
       { key: 'monthlyGross$', label: 'Monthly Gross Rent ($)', render: r => fmtUSD(r.monthlyGross$ || 0), sum: r => r.monthlyGross$ || 0 }
-    ];
+    );
 
-    let schema;
-    if (perspective === 'tenant') {
-      const optionalCols = tenantOpCols
-        .filter(col => rows.some(r => Math.abs(Number(r[col.key] || 0)) > 1e-9))
-        .map(col => ({
-          key: col.key,
-          label: (serviceType === 'mg_stop' || normalizeMode(col.mode) === 'stop')
-            ? `${col.base} Over Base ($/SF/yr)`
-            : `${col.base} ($/SF/yr)`,
-          render: r => fmtUSD(Number(r[col.key] || 0))
-        }));
-      schema = [...tenantSchemaBase, ...optionalCols, ...tenantTail];
-    } else {
-      schema = landlordSchema;
-    }
+    const schema = (perspective === 'tenant') ? tenantColumns : landlordColumns;
 
     thead.innerHTML = '';
     const headerRow = document.createElement('tr');
     schema.forEach(col => {
       const th = document.createElement('th');
-      th.textContent = col.label;
+      if (col.headerHTML) th.innerHTML = col.headerHTML;
+      else th.textContent = col.label;
       headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
