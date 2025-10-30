@@ -1106,39 +1106,6 @@
 
 
     // --- Custom expenses UI -------------------------------------------------
-    let rowSeq = 0;
-
-    function updateCustomRowModeUI(rowEl) {
-      const modeSel = q('.cx-mode', rowEl);
-      const baseWrap = q('.cx-base-wrap', rowEl);
-      const kicker = q('.cx-kicker', rowEl); // optional helper text
-      const isStop = modeSel?.value === 'stop';
-      if (baseWrap) baseWrap.style.display = isStop ? '' : 'none';
-      if (kicker) kicker.hidden = !isStop;
-    }
-
-    function addCustomRow(prefill = {}) {
-      if (!rowTpl || !customList) return;
-      const node = rowTpl.content.firstElementChild.cloneNode(true);
-      node.dataset.idx = String(++rowSeq);
-
-      const serviceType = (serviceType?.value || 'nnn').toLowerCase();
-      const defaultMode = defaultOpExModeForService(serviceType) || 'tenant';
-      const initialMode = prefill.mode ?? defaultMode;
-
-      q('.cx-label', node).value = prefill.label ?? '';
-      q('.cx-val', node).value = prefill.value ?? '';
-      q('.cx-growth', node).value = prefill.growth ?? '';
-      q('.cx-growthUnit', node).value = prefill.growthUnit ?? 'pct';
-      q('.cx-mode', node).value = initialMode;
-      q('.cx-base', node).value = prefill.base ?? '';
-
-      node.dataset.autoMode = prefill.mode ? '0' : '1';
-
-      updateCustomRowModeUI(node);
-      customList.appendChild(node);
-    }
-
     // delegated events
     customList?.addEventListener('click', (e) => {
       const btn = e.target.closest('.cx-delete');
