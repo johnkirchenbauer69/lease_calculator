@@ -2088,3 +2088,38 @@ th .hdr-note {
   opacity: .7;
   margin-top: 2px;
 }
+
+/* Popup container + content */
+.maplibregl-popup,
+.mapboxgl-popup { font-family: inherit; }
+
+.maplibregl-popup-content,
+.mapboxgl-popup-content {
+  background: #000;        /* black card */
+  color: #fff;             /* white text */
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+}
+
+/* Title + body inside your custom markup */
+.map-card-title { 
+  color: #fff; 
+  font-weight: 700; 
+  margin-bottom: 4px; 
+}
+.map-card-body { color: #fff; opacity: .95; }
+
+/* Make the popup arrow (tip) black for all anchor positions */
+.maplibregl-popup-anchor-top    .maplibregl-popup-tip,
+.mapboxgl-popup-anchor-top      .mapboxgl-popup-tip   { border-bottom-color: #000; }
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.mapboxgl-popup-anchor-bottom   .mapboxgl-popup-tip   { border-top-color:    #000; }
+.maplibregl-popup-anchor-left   .maplibregl-popup-tip,
+.mapboxgl-popup-anchor-left     .mapboxgl-popup-tip   { border-right-color:  #000; }
+.maplibregl-popup-anchor-right  .maplibregl-popup-tip,
+.mapboxgl-popup-anchor-right    .mapboxgl-popup-tip   { border-left-color:   #000; }
+
+/* Optional: links inside the card */
+.maplibregl-popup-content a,
+.mapboxgl-popup-content a { color: #9bd3ff; text-decoration: underline; }
