@@ -222,9 +222,9 @@
 
   <!-- Growth (col 3-4) + Advanced toggle -->
   <div class="field col-3-4">
-    <label class="right">
+    <label class="field-label with-adv right">
       Annual Increase
-      <button type="button" class="link tiny" data-adv-toggle="taxes">Advanced</button>
+      <button type="button" class="adv-pill sm" id="advTaxes" aria-pressed="false">Advanced</button>
     </label>
     <div class="input-with-addon">
       <input id="taxesGrowth" type="text" inputmode="decimal" placeholder="2.5" data-format="percent" aria-label="Taxes growth" />
@@ -400,7 +400,7 @@
   </div>
 
   <!-- Advanced row (spans all 4 columns) -->
-  <div class="opx-adv col-1-4" data-for="taxes" hidden>
+  <div class="opx-adv col-1-4" data-for="taxes" id="taxes-advanced" hidden>
     <div class="adv-grid">
       <!-- Gross-up -->
       <div class="adv-group">
@@ -469,9 +469,9 @@
 
   <!-- Growth (col 3-4) + Advanced toggle -->
   <div class="field col-3-4">
-    <label class="right">
+    <label class="field-label with-adv right">
       Annual Increase
-      <button type="button" class="link tiny" data-adv-toggle="cam">Advanced</button>
+      <button type="button" class="adv-pill sm" id="advCam" aria-pressed="false">Advanced</button>
     </label>
     <div class="input-with-addon">
       <input id="camGrowth" type="text" inputmode="decimal" placeholder="2.5" data-format="percent" aria-label="CAM growth" />
@@ -647,7 +647,7 @@
   </div>
 
   <!-- Advanced row -->
-  <div class="opx-adv col-1-4" data-for="cam" hidden>
+  <div class="opx-adv col-1-4" data-for="cam" id="cam-advanced" hidden>
     <div class="adv-grid">
       <!-- Gross-up (typical for CAM) -->
       <div class="adv-group">
@@ -716,9 +716,9 @@
 
   <!-- Growth (col 3-4) + Advanced toggle -->
   <div class="field col-3-4">
-    <label class="right">
+    <label class="field-label with-adv right">
       Annual Increase
-      <button type="button" class="link tiny" data-adv-toggle="ins">Advanced</button>
+      <button type="button" class="adv-pill sm" id="advIns" aria-pressed="false">Advanced</button>
     </label>
     <div class="input-with-addon">
       <input id="insGrowth" type="text" inputmode="decimal" placeholder="2.0" data-format="percent" aria-label="Insurance growth" />
@@ -811,7 +811,7 @@
 </div>
 
   <!-- Advanced row -->
-  <div class="opx-adv col-1-4" data-for="ins" hidden>
+  <div class="opx-adv col-1-4" data-for="ins" id="ins-advanced" hidden>
     <div class="adv-grid">
       <!-- Gross-up (optional for insurance) -->
       <div class="adv-group">
