@@ -2027,3 +2027,12 @@ th .hdr-note {
   opacity: .7;
   margin-top: 2px;
 }
+
+<style>
+.mapboxgl-popup, .mt-maplibregl-popup { /* MapTiler uses MapLibre classes */
+  font-family: inherit;
+}
+.map-card { min-width: 220px; }
+.map-card-title { font-weight: 600; margin-bottom: 4px; }
+.map-card-body { font-size: 0.95rem; opacity: .9; }
+</style>
