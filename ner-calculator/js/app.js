@@ -41,6 +41,22 @@
     }
   
     function fmtPSF(v) { return (isFinite(v) ? `$${v.toFixed(2)}/SF` : '$0.00/SF'); }
+
+    function computeLandlordFreeTI({ tiAmount = 0, tiUnit = 'per_sf', areaSF = 0, treatment = 'cash' } = {}) {
+      const amount = Number(tiAmount) || 0;
+      const unit = (tiUnit || '').toString().toLowerCase();
+      const area = Number(areaSF) || 0;
+      const treat = (treatment || '').toString().toLowerCase();
+
+      const isPerSF = unit === 'per_sf'
+        || unit === 'psf'
+        || unit.includes('/sf')
+        || unit.includes('per sf')
+        || unit.includes('$/sf');
+
+      const total = isPerSF ? (amount * area) : amount;
+      return treat === 'cash' ? total : 0;
+    }
   
     // LL Gross excludes pass-through recoveries across all service types.
     function includeOpExInGross(perspective, serviceType) {
@@ -1545,8 +1561,14 @@ window.addEventListener('load', initMap);
   
         const llAllowanceApplied = Math.min(llAllowTotal, totalCapex);
         const tenantContribution = Math.max(0, totalCapex - llAllowanceApplied);
-  
+
         const llAllowTreatment = $('#llAllowTreatment')?.value || 'cash';  // 'cash' | 'amort'
+        const landlordFreeTICash = computeLandlordFreeTI({
+          tiAmount: llAllowVal,
+          tiUnit: llAllowUnit,
+          areaSF: area,
+          treatment: llAllowTreatment
+        });
         const llAllowApr = rawNumberFromInput($('#llAllowApr')) / 100;
   
         // For table display ($/SF)
@@ -2154,11 +2176,8 @@ window.addEventListener('load', initMap);
         const landlordFreeTI = Array(schedule.length + 1).fill(0);
         const freeTIAllowance = Array(schedule.length + 1).fill(0);
 
-        if (llAllowTotal > 0) {
-          const freePortion = (llAllowTreatment === 'cash') ? llAllowanceApplied : 0;
-          landlordFreeTI[0] = freePortion;
-          freeTIAllowance[0] = freePortion;
-        }
+        landlordFreeTI[0] = landlordFreeTICash;
+        freeTIAllowance[0] = landlordFreeTICash;
   
         // -----------------------------------------------------------------------
         // KPIs (PV & simple)
@@ -2396,7 +2415,7 @@ window.addEventListener('load', initMap);
           totalIncentivePV,   // Free Rent (PV) + TI Offer (PV)
           llAllowanceOffered: llAllowTotal,
           llAllowTreatment: llAllowTreatment,                           // 'cash' | 'amort'
-          llFreeTIY0:      (llAllowTreatment === 'cash'  ? llAllowanceApplied : 0),
+          llFreeTIY0:      landlordFreeTICash,
           llFinancedTIY0:  (llAllowTreatment === 'amort' ? llAllowanceApplied : 0),
           totalCapex,              // NEW: Total Improvement Costs (for Build-Out Costs row)
   
