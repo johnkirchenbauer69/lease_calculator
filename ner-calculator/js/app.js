@@ -3466,59 +3466,67 @@ window.addEventListener('load', initMap);
     window.summarizeGrossByPerspective = summarizeGrossByPerspective;
     window.renderScheduleTable = renderScheduleTable;
 
-    function wireSummaryToggle() {
-      const btnSummary = document.getElementById('btnSummary');
-      const btnCashflow = document.getElementById('btnCashflow');
-      const summaryPanel = document.getElementById('comparisonSummary');
-      const cashflowPanel = document.getElementById('cashflowPanel');
+    (function initComparisonToggle() {
+      if (window.__comparisonToggleInit) return;
+      window.__comparisonToggleInit = true;
+
+      const kpi = document.getElementById('kpiResults');
+      let btnSum = document.getElementById('btnComparisonSummary');
+      let btnCF = document.getElementById('btnCashFlowComparison');
+      const panelSum = document.getElementById('comparisonSummary');
+      const panelCF = document.getElementById('cashFlowComparison');
       const hiddenWrap = document.getElementById('toggleHiddenRowsWrap');
       const hiddenInput = document.getElementById('toggleHiddenRows');
 
-      if (!btnSummary || !btnCashflow || !summaryPanel || !cashflowPanel || !hiddenWrap || !hiddenInput) return;
+      if (!kpi || !btnSum || !btnCF || !panelSum || !panelCF) {
+        console.warn('[Toggle] Missing required elements (kpiResults/buttons/panels).');
+        return;
+      }
 
-      const renderSummary = () => {
+      function renderSummaryIfNeeded() {
         if (typeof window.renderComparisonSummary === 'function') {
-          window.renderComparisonSummary({ showHidden: hiddenInput.checked });
+          window.renderComparisonSummary({ showHidden: !!hiddenInput?.checked });
         }
-      };
+      }
 
-      btnSummary.addEventListener('click', () => {
-        if (btnSummary.classList.contains('chip-active')) return;
-        btnSummary.classList.add('chip-active');
-        btnCashflow.classList.remove('chip-active');
-        summaryPanel.style.display = '';
-        cashflowPanel.style.display = 'none';
-        hiddenWrap.classList.remove('hidden');
-        renderSummary();
-      });
+      function showPanel(which) {
+        const isSummary = which === 'summary';
 
-      btnCashflow.addEventListener('click', () => {
-        if (btnCashflow.classList.contains('chip-active')) return;
-        btnCashflow.classList.add('chip-active');
-        btnSummary.classList.remove('chip-active');
-        summaryPanel.style.display = 'none';
-        cashflowPanel.style.display = '';
-        hiddenWrap.classList.add('hidden');
-      });
+        panelSum.classList.toggle('hidden', !isSummary);
+        panelCF.classList.toggle('hidden', isSummary);
 
-      hiddenInput.addEventListener('change', () => {
-        if (summaryPanel.style.display !== 'none') {
-          renderSummary();
+        btnSum.classList.toggle('active', isSummary);
+        btnCF.classList.toggle('active', !isSummary);
+
+        btnSum.setAttribute('aria-selected', String(isSummary));
+        btnCF.setAttribute('aria-selected', String(!isSummary));
+
+        if (hiddenWrap) {
+          hiddenWrap.classList.toggle('hidden', !isSummary);
         }
-      });
 
-      // Default state
-      btnSummary.classList.add('chip-active');
-      btnCashflow.classList.remove('chip-active');
-      summaryPanel.style.display = '';
-      cashflowPanel.style.display = 'none';
-      hiddenWrap.classList.remove('hidden');
-      renderSummary();
-    }
+        if (isSummary) {
+          renderSummaryIfNeeded();
+        }
+      }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', wireSummaryToggle);
-    } else {
-      wireSummaryToggle();
-    }
+      btnSum.replaceWith(btnSum.cloneNode(true));
+      btnCF.replaceWith(btnCF.cloneNode(true));
+
+      btnSum = document.getElementById('btnComparisonSummary');
+      btnCF = document.getElementById('btnCashFlowComparison');
+
+      btnSum.addEventListener('click', () => showPanel('summary'));
+      btnCF.addEventListener('click', () => showPanel('cashflow'));
+
+      if (hiddenInput) {
+        hiddenInput.addEventListener('change', () => {
+          if (!panelSum.classList.contains('hidden')) {
+            renderSummaryIfNeeded();
+          }
+        });
+      }
+
+      showPanel('summary');
+    })();
   })();

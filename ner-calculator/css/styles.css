@@ -3430,6 +3430,25 @@ td[data-unit][title] {
   cursor: help;
 }
 
+/* Toggle container buttons */
+.toggle-btn {
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border, #2a2a2a);
+  background: var(--surface, #111);
+  color: var(--text, #eaeaea);
+  font-weight: 600;
+}
+
+.toggle-btn.active {
+  background: var(--accent, #b30000);
+  border-color: var(--accent, #b30000);
+  color: #fff;
+}
+
+/* Panels share common class; 'hidden' controls visibility */
+.toggle-panel.hidden { display: none !important; }
+
 .compare-toggle {
   display:flex;
   align-items:center;
