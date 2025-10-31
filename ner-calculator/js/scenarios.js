@@ -1,5 +1,5 @@
 /* =============================================================================
-   Scenario Comparison (1–10)
+   Cash Flow Comparison (1–10)
    - Left: photo + toolbar + KPI chips
    - Right: horizontally-scrollable annual cash-flow table
    - Single source of truth: model.schedule[]
@@ -54,7 +54,7 @@ function getCompareCount() {
 }
 function updateCompareTitle(n) {
   const h = document.getElementById('scenarioCompareTitle');
-  if (h) h.textContent = `Scenario Comparison (1—${n})`;
+  if (h) h.textContent = `Cash Flow Comparison (1—${n})`;
 }
 function buildCompareCountSelect() {
   const sel = document.getElementById('compareCount');
@@ -120,6 +120,24 @@ function buildMiniTableHTML(model) {
   const yearsSet = new Set(sched.map(r => r.calYear));
   const years = [...yearsSet].sort((a,b)=>a-b);
   const hasOther = !!model.hasOtherOpEx;
+  const cashflowExtras = model.cashflowExtras || {};
+  const calcExtras = model.calc || {};
+  const freeTiSeriesTenant = Array.isArray(cashflowExtras.landlordFreeTI)
+    ? cashflowExtras.landlordFreeTI
+    : (Array.isArray(calcExtras.landlordFreeTI) ? calcExtras.landlordFreeTI : null);
+  const freeTiSeriesLandlord = Array.isArray(cashflowExtras.freeTIAllowance)
+    ? cashflowExtras.freeTIAllowance
+    : (Array.isArray(calcExtras.freeTIAllowance) ? calcExtras.freeTIAllowance : freeTiSeriesTenant);
+
+  const monthsByYear = new Map();
+  for (const row of sched) {
+    const year = row?.calYear;
+    const idx = Number(row?.monthIndex);
+    if (!Number.isInteger(year) || !Number.isFinite(idx)) continue;
+    const arr = monthsByYear.get(year) || [];
+    arr.push(idx);
+    monthsByYear.set(year, arr);
+  }
 
   // Aggregate by calendar year (all dollars)
   const byY = new Map();
@@ -195,6 +213,31 @@ years.forEach(y => {
   const firstY  = years[0];
   const y0 = firstY - 1;
   const allYears = [y0, ...years];
+
+  const tenantFreeTiYr = Object.fromEntries(allYears.map(y => [y, 0]));
+  const landlordAllowanceYr = Object.fromEntries(allYears.map(y => [y, 0]));
+
+  const distributeTiSeries = (series, target) => {
+    if (!Array.isArray(series)) return false;
+    target[y0] = (target[y0] || 0) + (Number(series[0]) || 0);
+    for (const [yr, indexes] of monthsByYear.entries()) {
+      if (!Object.prototype.hasOwnProperty.call(target, yr)) continue;
+      let sum = 0;
+      for (const idx of indexes) sum += Number(series[idx] || 0);
+      target[yr] = (target[yr] || 0) + sum;
+    }
+    return true;
+  };
+
+  const hasTenantSeries = distributeTiSeries(freeTiSeriesTenant, tenantFreeTiYr);
+  const hasLandlordSeries = distributeTiSeries(freeTiSeriesLandlord, landlordAllowanceYr);
+
+  if (!hasTenantSeries) {
+    tenantFreeTiYr[y0] = Number(kpis.llFreeTIY0) || 0;
+  }
+  if (!hasLandlordSeries) {
+    landlordAllowanceYr[y0] = Number(kpis.llFreeTIY0) || 0;
+  }
   const tiPrinYr = {}, tiIntYr = {};
 years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
 
@@ -300,7 +343,12 @@ function expTotal(label, values, key, { strong=false, highlight=false, paren=fal
   }).join('');
 
   return `<tr class="${cls}" data-exp="${key}">
-    <th><button class="twisty" data-exp="${key}" aria-expanded="true">▾</button> ${lbl}</th>${tds}
+    <th>
+      <button class="subtotal-toggle expanded" data-exp="${key}" aria-expanded="true">
+        <span class="chevron" aria-hidden="true"></span>
+        <span class="toggle-label">${lbl}</span>
+      </button>
+    </th>${tds}
   </tr>`;
 }
 
@@ -330,20 +378,18 @@ if (perspective === 'tenant') {
 
   // ── Upfront / Possession (Y0 only) ─────────────────────────────────────
   const totalCapex = +kpis.totalCapex || 0;              // Total Improvement Costs
-  const freeTIY0   = +kpis.llFreeTIY0     || 0;          // landlord free TI in Y0
   const finTIY0    = +kpis.llFinancedTIY0 || 0;          // landlord financed TI in Y0
 
   const buildOutYr = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -totalCapex : 0)])); // negative (tenant outflow)
-  const freeTIYr   = Object.fromEntries(allYears.map(y => [y, (y === y0 ?  freeTIY0  : 0)]));  // positive (LL covers)
   const finTIYr    = Object.fromEntries(allYears.map(y => [y, (y === y0 ?  finTIY0   : 0)]));  // positive (LL finances)
 
   const netDue = Object.fromEntries(allYears.map(y => [
-    y, (buildOutYr[y] || 0) + (freeTIYr[y] || 0) + (finTIYr[y] || 0)
+    y, (buildOutYr[y] || 0) + (tenantFreeTiYr[y] || 0) + (finTIYr[y] || 0)
   ]));
 
   const upfrontBlock = [
     rowHTML('Build-Out Costs',              buildOutYr, { paren:true, child:true, group:'upfront' }),
-    rowHTML('Landlord Free TI',             freeTIYr,   {              child:true, group:'upfront' }),
+    rowHTML('Landlord Free TI',             tenantFreeTiYr,   {              child:true, group:'upfront' }),
     rowHTML('Landlord Financed TI',         finTIYr,    {              child:true, group:'upfront' }),
     expTotal('Net Tenant Cash Due at Possession', netDue, 'upfront',
              { strong:true, highlight:true, paren:true })
@@ -462,10 +508,9 @@ allYears.forEach(y => {
 });
 
 // --- Initial TI Outlay (Y0 only): split Free vs Financed using kpis
-const freeTIY0     = (+kpis.llFreeTIY0     || 0);
 const financedTIY0 = (+kpis.llFinancedTIY0 || 0);
 
-const initFree = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -freeTIY0     : 0)]));
+const initFree = Object.fromEntries(allYears.map(y => [y, -(landlordAllowanceYr[y] || 0)]));
 const initFin  = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -financedTIY0 : 0)]));
 const initTI   = Object.fromEntries(allYears.map(y => [y, initFree[y] + initFin[y]]));
 
@@ -680,14 +725,15 @@ function renderCompareGrid() {
   host.innerHTML = html;
 
   // Wire expand/collapse (the subtotal row controls its child group)
-  host.querySelectorAll('.scenario-right .twisty').forEach(btn => {
+  host.querySelectorAll('.scenario-right .subtotal-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.exp;
-      const open = btn.getAttribute('aria-expanded') !== 'false';
-      btn.setAttribute('aria-expanded', String(!open));
-      btn.textContent = open ? '▸' : '▾';
+      const expanded = btn.getAttribute('aria-expanded') !== 'false';
+      const next = !expanded;
+      btn.setAttribute('aria-expanded', String(next));
+      btn.classList.toggle('expanded', next);
       host.querySelectorAll(`.scenario-right tr.child-of-${key}`).forEach(tr => {
-        tr.style.display = open ? 'none' : '';
+        tr.style.display = next ? '' : 'none';
       });
     });
   });
@@ -707,7 +753,7 @@ function bootScenarios() {
 
   // Expand all before printing / exporting PDF to ensure details show
   window.addEventListener('beforeprint', () => {
-    document.querySelectorAll('#compareGrid .scenario-right .twisty').forEach(btn => {
+    document.querySelectorAll('#compareGrid .scenario-right .subtotal-toggle').forEach(btn => {
       if (btn.getAttribute('aria-expanded') === 'false') btn.click();
     });
   });
