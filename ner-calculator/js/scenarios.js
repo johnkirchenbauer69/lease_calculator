@@ -587,6 +587,10 @@ if (perspective === 'tenant') {
   const freeTIYr   = Object.fromEntries(allYears.map(y => [y, landlordFreeTotals[y] || 0]));  // positive (LL covers)
   const finTIYr    = Object.fromEntries(allYears.map(y => [y, (y === y0 ?  finTIY0   : 0)]));  // positive (LL finances)
 
+  if (perspective === 'tenant' && tiCash > 0 && Math.abs(freeTIYr[tiYearKey] || 0) < 1e-8) {
+    freeTIYr[tiYearKey] = tiCash;
+  }
+
   const netDue = Object.fromEntries(allYears.map(y => [
     y, (buildOutYr[y] || 0) + (freeTIYr[y] || 0) + (finTIYr[y] || 0)
   ]));
@@ -735,6 +739,9 @@ const financedTIY0 = financedPrincipal;
 
 const initFree = Object.fromEntries(allYears.map(y => [y, -(freeTIAllowanceTotals[y] || 0)]));
 const initFin  = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -financedTIY0 : 0)]));
+if (perspective === 'landlord' && tiCash > 0 && Math.abs(initFree[tiYearKey] || 0) < 1e-8) {
+  initFree[tiYearKey] = -tiCash;
+}
 const initTI   = Object.fromEntries(allYears.map(y => [y, initFree[y] + initFin[y]]));
 
 // --- Net Cash Flow (before debt)
