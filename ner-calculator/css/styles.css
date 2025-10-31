@@ -26,7 +26,11 @@
   --muted: #b7b7bf;
   --accent: #0a84ff;
   --accent-2: #64d2ff;
-  --lee-red: #c8102e;
+  --lee-red: #E84D4D;
+  --popup-bg-a: rgba(8, 8, 10, 0.92);
+  --popup-bg-b: rgba(8, 8, 10, 0.86);
+  --popup-border: rgba(255,255,255,0.08);
+  --popup-shadow: 0 12px 34px rgba(0,0,0,.45);
   --radius: 20px;
   --shadow: 0 8px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
   --container-max: 1600px;
@@ -334,6 +338,63 @@ select:focus option{ background-color: #1a1a1a; }
 .schedule th:first-child{ text-align:center; }
 .schedule th{ background: rgba(255,255,255,.04); position: sticky; top:0; backdrop-filter: blur(8px); }
 .schedule tbody tr:hover{ background: rgba(255,255,255,.03); }
+.schedule tbody tr.row-subtotal:hover,
+.schedule tbody tr.row-grandtotal:hover { background: inherit; }
+
+.row-subtotal {
+  border-top: 2px solid var(--accent, #0a84ff);
+  background: color-mix(in srgb, var(--accent, #0a84ff) 10%, transparent);
+}
+
+.row-subtotal td:first-child {
+  text-align: left;
+}
+
+.row-subtotal .cell-dollar {
+  font-weight: 600;
+}
+
+.year-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 22px;
+  padding: 0 10px;
+  margin-right: 8px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--accent, #0a84ff) 22%, transparent);
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  font-size: 12px;
+}
+
+.cell-muted {
+  color: color-mix(in srgb, currentColor 60%, transparent);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-grandtotal {
+  border-top: 2px solid var(--accent, #0a84ff);
+  border-bottom: 2px solid var(--accent, #0a84ff);
+  background: color-mix(in srgb, var(--accent, #0a84ff) 16%, transparent);
+  font-size: 1.05em;
+}
+
+.row-grandtotal td:first-child {
+  text-align: left;
+}
+
+.row-grandtotal .cell-dollar {
+  font-weight: 700;
+}
+
+.row-grandtotal td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
 /* Span the full two-column grid */
 .span-all { grid-column: 1 / -1; }
 /* Span helper (already in your sheet, shown for clarity) */
@@ -858,12 +919,58 @@ html, body { overflow-x: hidden; } /* prevent horizontal scroll from tiny overfl
 @keyframes rip { to{ transform:scale(1); opacity:0; } }
 
 /* Property photo uploader */
-.photo-row { display:flex; gap:.75rem; align-items:center; }
-.photo-preview {
-  margin-top:.5rem; border:1px solid var(--surface-2);
-  border-radius:12px; padding:6px; max-width:560px; background:var(--surface-1);
+.visually-hidden {
+  position:absolute !important;
+  width:1px; height:1px;
+  padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0);
+  white-space:nowrap; border:0;
 }
-.photo-preview img { display:block; width:100%; height:auto; border-radius:10px; }
+
+.photo-row { display:flex; gap:.75rem; align-items:center; }
+
+.file-uploader {
+  flex:1 1 auto;
+  display:grid;
+  gap:6px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--border, rgba(255,255,255,.08));
+  background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+  box-shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 6px 18px rgba(0,0,0,.25);
+  cursor:pointer;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.file-uploader:hover {
+  border-color:color-mix(in srgb, var(--accent) 35%, rgba(255,255,255,.08));
+}
+.file-uploader:focus-visible {
+  outline:2px solid color-mix(in srgb, var(--accent) 70%, white 30%);
+  outline-offset:2px;
+}
+.file-uploader.dragging {
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  background:color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.file-actions { display:flex; align-items:center; gap:10px; }
+.file-name { color:rgba(255,255,255,.85); font-size:.95rem; transition:color .18s ease; }
+.file-name.is-error { color:var(--error, #fca5a5); }
+.file-help { color:rgba(255,255,255,.55); font-size:.8rem; }
+
+.photo-preview {
+  margin-top:10px;
+  border-radius:12px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(0,0,0,.25);
+}
+.photo-preview img {
+  display:block;
+  width:100%;
+  max-height:220px;
+  object-fit:cover;
+}
 .cmp-photo { margin: 8px 0 12px; }
 .cmp-photo img { width:100%; max-height:160px; object-fit:cover; border-radius:12px; display:block; }
 
