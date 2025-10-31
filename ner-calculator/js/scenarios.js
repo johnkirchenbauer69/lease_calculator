@@ -187,13 +187,59 @@ function deriveKPIs(model) {
 }
 
 /* ---------- mini annual table (right side) ------------------------------- */
-function buildMiniTableHTML(model) {
+function buildMiniTableHTML(model, opts = {}) {
   const sched = Array.isArray(model.schedule) ? model.schedule : [];
-  const yearsSet = new Set(sched.map(r => r.calYear));
-  const years = [...yearsSet].sort((a,b)=>a-b);
   const hasOther = !!model.hasOtherOpEx;
   const showHidden = document.getElementById('showHiddenRows')?.checked;
   const renderedRowKeys = new Set();
+
+  // ---- ensure years are known BEFORE any use
+  // Try several sources; take the first non-empty; then sort ascending.
+  const yearsFromModel =
+    (model?.years && Object.keys(model.years)) ||
+    (model?.annualYears && [...model.annualYears]) ||
+    (model?.headers?.years && [...model.headers.years]) ||
+    (model?.scheduleAnnual && Object.keys(model.scheduleAnnual)) ||
+    null;
+
+  // We also allow the caller to pass a years list via opts if present.
+  const yearsFromOpts = (opts && Array.isArray(opts.years) && opts.years.length ? [...opts.years] : null);
+
+  // Fallback: infer from known series if everything else is empty
+  function keysIf(obj) { return obj ? Object.keys(obj) : []; }
+  const yearsFromSeries = (
+    keysIf(model?.baseRentByYear).length ? keysIf(model.baseRentByYear) :
+    keysIf(model?.taxesByYear).length ? keysIf(model.taxesByYear) :
+    keysIf(model?.camByYear).length ? keysIf(model.camByYear) :
+    keysIf(model?.insuranceByYear).length ? keysIf(model.insuranceByYear) :
+    keysIf(model?.mgmtFeeByYear).length ? keysIf(model.mgmtFeeByYear) :
+    []
+  );
+
+  // Choose the winner and normalize to sorted numeric-ish strings
+  let allYearCandidates = (yearsFromOpts || yearsFromModel || yearsFromSeries || []).map(String);
+  allYearCandidates = [...new Set(allYearCandidates)].sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+
+  // Guard: if still empty, derive a single start year so downstream code won’t crash
+  if (allYearCandidates.length === 0) {
+    const start = (model?.startYear) || new Date().getFullYear();
+    allYearCandidates = [String(start)];
+  }
+
+  const scheduleYears = [...new Set(sched.map(r => r.calYear).filter(y => y != null))].sort((a, b) => a - b);
+  let years = scheduleYears.slice();
+  if (!years.length) {
+    years = allYearCandidates
+      .map(y => parseInt(y, 10))
+      .filter(n => Number.isFinite(n));
+    years = [...new Set(years)].sort((a, b) => a - b);
+  }
+
+  const fallbackYear = Number.isFinite(years[0]) ? years[0] : parseInt(allYearCandidates[0], 10);
+  const resolvedFirstYear = Number.isFinite(fallbackYear) ? fallbackYear : new Date().getFullYear();
+  const y0 = resolvedFirstYear - 1;
+  years = years.length ? years : [resolvedFirstYear];
+  let allYears = [y0, ...years];
 
   // Aggregate by calendar year (all dollars)
   const byY = new Map();
@@ -272,9 +318,6 @@ years.forEach(y => {
 
   // Extras from KPIs
   const kpis    = model.kpis || {};
-  const firstY  = years[0];
-  const y0 = firstY - 1;
-  const allYears = [y0, ...years];
   const compareSeries = model.compareSeries || {};
   const landlordFreeSeries = Array.isArray(compareSeries.landlordFreeTI) ? compareSeries.landlordFreeTI : [];
   const freeTIAllowanceSeries = Array.isArray(compareSeries.freeTIAllowance) ? compareSeries.freeTIAllowance : landlordFreeSeries;
