@@ -1371,8 +1371,11 @@ window.addEventListener('load', initMap);
       kpiResults?.classList.toggle('hidden', mode === 'compare');
       try { localStorage.setItem('ner_view_mode', mode); } catch { }
       if (mode === 'charts' && window.charts && window.__ner_last) window.charts.update(window.__ner_last);
-      if (mode === 'compare' && typeof window.renderCompareGrid === 'function') {
-        window.renderCompareGrid();
+      if (mode === 'compare') {
+        window.updateLeaseComparisonView?.('summary');
+        if (typeof window.renderCompareGrid === 'function') {
+          window.renderCompareGrid();
+        }
       }
     }
 
@@ -3480,96 +3483,54 @@ window.addEventListener('load', initMap);
       if (window.__leaseComparisonVisibilityInit) return;
       window.__leaseComparisonVisibilityInit = true;
 
-      const kpi = document.getElementById('kpiResults');
+      const els = {
+        btnSummary: document.getElementById('btnComparisonSummary'),
+        btnCash: document.getElementById('btnCashFlowComparison'),
+        panelSummary: document.getElementById('comparisonSummary'),
+        panelCash: document.getElementById('cashFlowComparison'),
+        hiddenRowsWrap: document.getElementById('hiddenRowsToggleWrap')
+      };
 
-      const tabRent = document.getElementById('tabRentSchedule');
-      const tabLease = document.getElementById('tabLeaseComparison');
-      const tabCharts = document.getElementById('tabCharts');
-
-      const btnSum = document.getElementById('btnComparisonSummary');
-      const btnCF = document.getElementById('btnCashFlowComparison');
-
-      const panelSum = document.getElementById('comparisonSummary');
-      const panelCF = document.getElementById('cashFlowComparison');
-
-      const hiddenWrap = document.getElementById('toggleHiddenRowsWrap');
-      const hiddenInput = document.getElementById('toggleHiddenRows');
-
-      if (!kpi || !tabRent || !tabLease || !tabCharts || !btnSum || !btnCF || !panelSum || !panelCF) {
-        console.warn('[LeaseComparison] Missing one or more required elements.');
+      if (!els.btnSummary || !els.btnCash || !els.panelSummary || !els.panelCash) {
+        console.warn('[LeaseComparison] Missing comparison toggle elements.');
         return;
       }
 
       function renderSummaryIfNeeded() {
         if (typeof window.renderComparisonSummary === 'function') {
-          window.renderComparisonSummary({ showHidden: !!hiddenInput?.checked });
+          const toggle = document.getElementById('toggleHiddenRows');
+          window.renderComparisonSummary({ showHidden: !!toggle?.checked });
         }
       }
 
-      function setKpiVisibilityForTab(activeTabId) {
-        const isLeaseComparison = activeTabId === 'tabLeaseComparison';
-        kpi.classList.toggle('hidden', isLeaseComparison);
+      function setActive(which) {
+        const isSummary = which === 'summary';
+        if (els.btnSummary) {
+          els.btnSummary.classList.toggle('active', isSummary);
+          els.btnSummary.setAttribute('aria-pressed', String(isSummary));
+          els.btnSummary.setAttribute('aria-selected', String(isSummary));
+        }
+        if (els.btnCash) {
+          els.btnCash.classList.toggle('active', !isSummary);
+          els.btnCash.setAttribute('aria-pressed', String(!isSummary));
+          els.btnCash.setAttribute('aria-selected', String(!isSummary));
+        }
       }
 
-      function showInnerPanel(which) {
-        const isSummary = which === 'summary';
-
-        panelSum.classList.toggle('hidden', !isSummary);
-        panelCF.classList.toggle('hidden', isSummary);
-
-        const currentBtnSum = document.getElementById('btnComparisonSummary');
-        const currentBtnCF = document.getElementById('btnCashFlowComparison');
-
-        currentBtnSum?.classList.toggle('active', isSummary);
-        currentBtnCF?.classList.toggle('active', !isSummary);
-
-        currentBtnSum?.setAttribute('aria-selected', String(isSummary));
-        currentBtnCF?.setAttribute('aria-selected', String(!isSummary));
-
-        hiddenWrap?.classList.toggle('hidden', !isSummary);
-
+      window.updateLeaseComparisonView = function (mode) {
+        const isSummary = mode === 'summary';
+        els.panelSummary?.classList.toggle('hidden', !isSummary);
+        els.panelCash?.classList.toggle('hidden', isSummary);
+        els.hiddenRowsWrap?.classList.toggle('hidden', isSummary);
+        setActive(mode);
         if (isSummary) {
           renderSummaryIfNeeded();
         }
-      }
+      };
 
-      function replaceWithClone(el) {
-        const clone = el.cloneNode(true);
-        el.parentNode.replaceChild(clone, el);
-        return clone;
-      }
+      els.btnSummary?.addEventListener('click', () => window.updateLeaseComparisonView('summary'));
+      els.btnCash?.addEventListener('click', () => window.updateLeaseComparisonView('cash'));
 
-      const cleanTabRent = replaceWithClone(tabRent);
-      const cleanTabLease = replaceWithClone(tabLease);
-      const cleanTabCharts = replaceWithClone(tabCharts);
-
-      const cleanBtnSum = replaceWithClone(btnSum);
-      const cleanBtnCF = replaceWithClone(btnCF);
-
-      cleanTabRent.addEventListener('click', () => setKpiVisibilityForTab('tabRentSchedule'));
-      cleanTabLease.addEventListener('click', () => setKpiVisibilityForTab('tabLeaseComparison'));
-      cleanTabCharts.addEventListener('click', () => setKpiVisibilityForTab('tabCharts'));
-
-      cleanBtnSum.addEventListener('click', () => showInnerPanel('summary'));
-      cleanBtnCF.addEventListener('click', () => showInnerPanel('cashflow'));
-
-      if (hiddenInput) {
-        hiddenInput.addEventListener('change', () => {
-          if (!panelSum.classList.contains('hidden')) {
-            renderSummaryIfNeeded();
-          }
-        });
-      }
-
-      window.__setKpiVisibilityForTab = setKpiVisibilityForTab;
-
-      const activeTab =
-        (document.querySelector('#tabLeaseComparison.active') && 'tabLeaseComparison') ||
-        (document.querySelector('#tabRentSchedule.active') && 'tabRentSchedule') ||
-        (document.querySelector('#tabCharts.active') && 'tabCharts') ||
-        'tabRentSchedule';
-
-      setKpiVisibilityForTab(activeTab);
-      showInnerPanel('summary');
+      window.updateLeaseComparisonView('summary');
     })();
   })();
