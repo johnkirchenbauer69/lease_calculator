@@ -41,6 +41,55 @@
     }
   
     function fmtPSF(v) { return (isFinite(v) ? `$${v.toFixed(2)}/SF` : '$0.00/SF'); }
+
+    function computeLandlordFreeTI({ tiAmount = 0, tiUnit = 'per_sf', areaSF = 0, treatment = 'cash' } = {}) {
+      const amount = Number(tiAmount) || 0;
+      const unit = (tiUnit || '').toString().toLowerCase();
+      const area = Number(areaSF) || 0;
+      const treat = (treatment || '').toString().toLowerCase();
+
+      const isPerSF = unit === 'per_sf'
+        || unit === 'psf'
+        || unit.includes('/sf')
+        || unit.includes('per sf')
+        || unit.includes('$/sf');
+
+      const total = isPerSF ? (amount * area) : amount;
+      return treat === 'cash' ? total : 0;
+    }
+
+    // Returns normalized KPI metrics for downstream cards & compare views.
+    function buildKpis({
+      schedule,
+      termMonths,
+      totalNetRent,
+      totalGrossRent,
+      totalBaseRent,
+      totalRecoveries,
+      totalOpex
+    } = {}) {
+      const safe = (n) => (Number.isFinite(n) ? n : 0);
+      const scheduleMonths = Array.isArray(schedule)
+        ? schedule.reduce((count, row) => (row && row.isTermMonth ? count + 1 : count), 0) || schedule.length || 0
+        : 0;
+      const months = (Number.isFinite(termMonths) && termMonths > 0)
+        ? termMonths
+        : scheduleMonths;
+
+      const net = safe(totalNetRent);
+      const gross = safe(totalGrossRent);
+
+      return {
+        termMonths: months,
+        totalNetRent: net,
+        totalGrossRent: gross,
+        totalBaseRent: safe(totalBaseRent),
+        totalRecoveries: safe(totalRecoveries),
+        totalOpex: safe(totalOpex),
+        avgMonthlyNet: months ? net / months : 0,
+        avgMonthlyGross: months ? gross / months : 0
+      };
+    }
   
     // LL Gross excludes pass-through recoveries across all service types.
     function includeOpExInGross(perspective, serviceType) {
@@ -270,6 +319,57 @@ window.addEventListener('load', initMap);
       const [y, m, day] = val.split("-").map(Number);
       return new Date(y, (m || 1) - 1, day || 1);
     }
+
+    function addMonthsUTC(date, months) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return new Date(NaN);
+      const m = Number(months) || 0;
+      const copy = new Date(date.getFullYear(), date.getMonth(), 1);
+      copy.setMonth(copy.getMonth() + m);
+      return copy;
+    }
+
+    function getLeaseTimingSummary(model = {}) {
+      const termMonths = Number(model?.termMonths ?? model?.term ?? 0) || 0;
+
+      const freeInfo = model?.freeRent || {};
+      const baseFree = Number(freeInfo?.months ?? model?.freeMonths ?? 0) || 0;
+      const patternFree = Number(freeInfo?.patternMonths ?? 0) || 0;
+      const freeMonths = baseFree + patternFree;
+
+      const placementRaw = (freeInfo?.freePlacement ?? freeInfo?.placement ?? model?.freePlacement ?? '')
+        .toString()
+        .toLowerCase();
+      const freePlacement = placementRaw === 'outside' ? 'outside' : 'inside';
+
+      const startCandidates = [];
+      if (model?.commencementDate) startCandidates.push(model.commencementDate);
+      if (model?.leaseStartISO) startCandidates.push(`${model.leaseStartISO}-01`);
+      if (model?.leaseStart) startCandidates.push(model.leaseStart);
+
+      let startDate = new Date(NaN);
+      for (const cand of startCandidates) {
+        if (!cand) continue;
+        const parsed = cand instanceof Date ? new Date(cand.getTime()) : new Date(cand);
+        if (!Number.isNaN(parsed.getTime())) {
+          startDate = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+          break;
+        }
+      }
+
+      const endDate = (!Number.isNaN(startDate.getTime()) && termMonths > 0)
+        ? addMonthsUTC(startDate, Math.max(termMonths - 1, 0))
+        : new Date(NaN);
+
+      const chips = [
+        `Term: ${termMonths} ${termMonths === 1 ? 'month' : 'months'}`,
+        `${freeMonths} ${freeMonths === 1 ? 'month' : 'months'} free`,
+        `${freePlacement} the term`
+      ];
+
+      return { startDate, endDate, termMonths, freeMonths, freePlacement, chips };
+    }
+
+    window.getLeaseTimingSummary = getLeaseTimingSummary;
     // Recalculate when commission/discount inputs change
     ['brokerCommission', 'discount'].forEach(id => {
       const el = document.getElementById(id);
@@ -1545,8 +1645,14 @@ window.addEventListener('load', initMap);
   
         const llAllowanceApplied = Math.min(llAllowTotal, totalCapex);
         const tenantContribution = Math.max(0, totalCapex - llAllowanceApplied);
-  
+
         const llAllowTreatment = $('#llAllowTreatment')?.value || 'cash';  // 'cash' | 'amort'
+        const landlordFreeTICash = computeLandlordFreeTI({
+          tiAmount: llAllowVal,
+          tiUnit: llAllowUnit,
+          areaSF: area,
+          treatment: llAllowTreatment
+        });
         const llAllowApr = rawNumberFromInput($('#llAllowApr')) / 100;
   
         // For table display ($/SF)
@@ -1703,7 +1809,8 @@ window.addEventListener('load', initMap);
         }
         const customSet = parseCustomMonths(abateCustomSpec, scheduleMonths);
         if (customSet.size) scheduleMonths = Math.max(scheduleMonths, Math.max(...customSet));
-  
+        const customPatternMonths = abateCustomSpec ? customSet.size : 0;
+
         const isMonthAbated = (m) => {
           if (customSet.size) return customSet.has(m);
           if (!freeMonths) return false;
@@ -2147,40 +2254,75 @@ window.addEventListener('load', initMap);
         }
   
         hasOtherOpEx = totalOtherAnnualPSF > 0;
+
+        // -----------------------------------------------------------------------
+        // Cash-flow comparison helpers (Landlord Free TI / Allowance lines)
+        // -----------------------------------------------------------------------
+        const landlordFreeTI = Array(schedule.length + 1).fill(0);
+        const freeTIAllowance = Array(schedule.length + 1).fill(0);
+
+        landlordFreeTI[0] = landlordFreeTICash;
+        freeTIAllowance[0] = landlordFreeTICash;
   
         // -----------------------------------------------------------------------
         // KPIs (PV & simple)
         // -----------------------------------------------------------------------
   
         function setTermChip(data) {
-          const chip = document.getElementById('termChip');
-          if (!chip) return;
-      
-          // Accept data.term OR data.termMonths; fallback to counting schedule months
-          const termMonths =
-            Number(data?.term ?? data?.termMonths ?? 0) ||
-            (Array.isArray(data?.schedule)
-              ? data.schedule.filter(m => m.isTermMonth ?? true).length
-              : 0);
-      
-          chip.textContent = `Term: ${termMonths} ${termMonths === 1 ? 'Month' : 'Months'}`;
-      
-          // (Optional) hide if 0 or invalid
-          chip.style.display = termMonths > 0 ? '' : 'none';
+          const container = document.getElementById('termChip');
+          if (!container) return;
+
+          const summary = (data && data.startDate instanceof Date && Array.isArray(data.chips))
+            ? data
+            : (typeof getLeaseTimingSummary === 'function' ? getLeaseTimingSummary(data || {}) : null);
+
+          const chips = summary?.chips?.filter(Boolean) || [];
+
+          container.innerHTML = '';
+
+          if (!chips.length) {
+            container.style.display = 'none';
+            return;
+          }
+
+          for (const text of chips) {
+            const pill = document.createElement('span');
+            pill.className = 'chip';
+            pill.textContent = text;
+            container.appendChild(pill);
+          }
+
+          container.style.display = '';
         }
        
         const yearsTerm = term / 12;
         const nerPV = (yearsTerm > 0 && area > 0)
           ? ((pvRentNet - pvTI_forNER) / area) / yearsTerm
           : 0;
-  
+
         const nerSimple = (yearsTerm > 0 && area > 0)
           ? ((totalPaidNet - llAllowanceApplied) / area) / yearsTerm
           : 0;
-  
-        const avgNetMonthly = term > 0 ? (totalPaidNet / term) : 0;
-        const avgGrossMonthly = term > 0 ? (totalPaidGross / term) : 0;
-  
+
+        let totalBaseRentNominal = 0;
+        schedule.forEach(row => {
+          if (!row || !row.isTermMonth) return;
+          const paidBase = (+row.preBase$ || 0) - (+row.freeBase$ || 0);
+          totalBaseRentNominal += paidBase;
+        });
+
+        const safeNum = (n) => (Number.isFinite(n) ? n : 0);
+        const kpis = buildKpis({
+          schedule,
+          termMonths: term,
+          totalNetRent: safeNum(totalPaidNet),
+          totalGrossRent: safeNum(totalPaidGross),
+          totalBaseRent: safeNum(totalBaseRentNominal),
+          totalRecoveries: undefined,
+          totalOpex: safeNum(totalLLOpex)
+        });
+        const { avgMonthlyNet, avgMonthlyGross, termMonths: safeTermMonths } = kpis;
+
         const grossSummaries = summarizeGrossByPerspective({
           schedule,
           area,
@@ -2188,21 +2330,25 @@ window.addEventListener('load', initMap);
         });
         const perspectiveKey = (activePerspective === 'tenant') ? 'tenant' : 'landlord';
         const grossSummaryForCards = grossSummaries[perspectiveKey] || grossSummaries.tenant || {
-          avgMonthlyGross: avgGrossMonthly,
-          totalGross: totalPaidGross
+          avgMonthlyGross,
+          totalGross: kpis.totalGrossRent
         };
-  
+
         // ----- KPI: Spread & Recovery
-        const avgMonthlySpread = (totalPaidGross - totalPaidNet) / term;           // $/mo
+        const avgMonthlySpread = safeTermMonths > 0
+          ? (kpis.totalGrossRent - kpis.totalNetRent) / safeTermMonths
+          : 0;           // $/mo
         const recoveryRatio = (tenantOpExNominal + totalLLOpex) > 0
           ? tenantOpExNominal / (tenantOpExNominal + totalLLOpex)
           : null;
-  
+
         // ----- KPI: All-in occupancy (avg gross per SF per month)
-        const occPSFmo = (totalPaidGross / term) / area;
-  
+        const occPSFmo = (safeTermMonths > 0 && area > 0)
+          ? (kpis.totalGrossRent / safeTermMonths) / area
+          : 0;
+
         // ----- KPI: Free Rent (PV) + (% term abated)
-        const pctAbated = term > 0 ? (abatedMonths / term) : 0;
+        const pctAbated = safeTermMonths > 0 ? (abatedMonths / safeTermMonths) : 0;
   
         // ----- Commission (Nominal & PV) – assume paid upfront on chosen basis
         let commissionNominal = 0;
@@ -2284,23 +2430,11 @@ window.addEventListener('load', initMap);
         }
   
         // Write KPI cards (if present)
-        if (leaseStartEl) {
-          leaseStartEl.textContent = startDate.toLocaleString(undefined, { month: 'short', year: 'numeric' });
-        }
-  
-        setTermChip({ term });
-  
-        // Use scheduleMonths so “outside” free months extend the displayed end date
-        if (leaseEndEl) {
-          const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + scheduleMonths - 1, 1);
-          leaseEndEl.textContent = endDate.toLocaleString(undefined, { month: 'short', year: 'numeric' });
-        }
-  
         if (nerPVEl) nerPVEl.textContent = formatUSD(nerPV);
         if (nerSimpleEl) nerSimpleEl.textContent = formatUSD(nerSimple);
-        if (avgNetMonthlyEl) avgNetMonthlyEl.textContent = formatUSD(avgNetMonthly);
+        if (avgNetMonthlyEl) avgNetMonthlyEl.textContent = formatUSD(avgMonthlyNet);
         if (avgGrossMonthlyEl) avgGrossMonthlyEl.textContent = formatUSD(grossSummaryForCards.avgMonthlyGross);
-        if (totalNetEl) totalNetEl.textContent = formatUSD(totalPaidNet);
+        if (totalNetEl) totalNetEl.textContent = formatUSD(kpis.totalNetRent);
         if (totalGrossEl) totalGrossEl.textContent = formatUSD(grossSummaryForCards.totalGross);
       
         function renderKpis(data) {
@@ -2319,10 +2453,17 @@ window.addEventListener('load', initMap);
         const insModeForModel = insMode;
         const mgmtModeForModel = mgmtMode;
   
+        const commencementISO = startDate
+          ? `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
+          : null;
+        const startYearValue = Number.isFinite(startDate.getFullYear()) ? startDate.getFullYear() : null;
+
         const model = {
           suite,
           area,
           termMonths: term,
+          startYear: startYearValue,
+          commencementDate: commencementISO,
           leaseStartISO: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`,
           leaseEndISO: (() => {
             const d = new Date(startDate.getFullYear(), startDate.getMonth() + scheduleMonths - 1, 1);
@@ -2330,12 +2471,23 @@ window.addEventListener('load', initMap);
           })(),
           nerPV,
           simpleNet: nerSimple,
-          avgNetMonthly,
-          avgGrossMonthly,
-          totalPaidNet,
-          totalPaidGross,
+          avgNetMonthly: avgMonthlyNet,
+          avgGrossMonthly: avgMonthlyGross,
+          totalPaidNet: kpis.totalNetRent,
+          totalPaidGross: kpis.totalGrossRent,
           schedule,
-  
+          compareSeries: {
+            landlordFreeTI,
+            freeTIAllowance
+          },
+
+          freeRent: {
+            months: freeMonths,
+            patternMonths: customPatternMonths,
+            placement: freePlacement,
+            timing: freeTiming
+          },
+
           serviceType: type,
           customExpenses: extraOpExRows.map(row => ({ ...row })),
           coreOpExModes: {
@@ -2363,7 +2515,92 @@ window.addEventListener('load', initMap);
         model.perspective = (localStorage.getItem('ner_perspective') || 'landlord');
         model.hasOtherOpEx = hasOtherOpEx;
         model.grossSummaries = grossSummaries;
-  
+
+        const leaseTiming = typeof getLeaseTimingSummary === 'function'
+          ? getLeaseTimingSummary(model)
+          : null;
+        const formatLeaseLabel = (date) => (date instanceof Date && !Number.isNaN(date.getTime()))
+          ? date.toLocaleString(undefined, { month: 'short', year: 'numeric' })
+          : '—';
+        const startLabel = leaseTiming
+          ? formatLeaseLabel(leaseTiming.startDate)
+          : startDate.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+        const endFallback = new Date(startDate.getFullYear(), startDate.getMonth() + scheduleMonths - 1, 1);
+        const endLabel = leaseTiming
+          ? formatLeaseLabel(leaseTiming.endDate)
+          : endFallback.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+        if (leaseStartEl) {
+          leaseStartEl.textContent = startLabel;
+        }
+        if (leaseEndEl) {
+          leaseEndEl.textContent = endLabel;
+        }
+
+        // Summary metrics for comparison views
+        const termRows = schedule.filter(row => row && row.isTermMonth);
+        let firstMonthGross = 0;
+        let lastMonthGross = 0;
+        let peakMonthlyGross = 0;
+        if (termRows.length) {
+          firstMonthGross = Number(termRows[0]?.grossTotal || 0);
+          lastMonthGross = Number(termRows[termRows.length - 1]?.grossTotal || 0);
+          peakMonthlyGross = termRows.reduce((max, row) => {
+            const val = Number(row?.grossTotal || 0);
+            return val > max ? val : max;
+          }, 0);
+        }
+
+        const freeMonthsTotal = Math.max(0, (freeMonths || 0) + (customPatternMonths || 0));
+        const primaryEscPct = (() => {
+          if (escMode === 'pct') return escalation * 100;
+          if (escMode === 'custom_pct' && escPctList.length) return escPctList[0] * 100;
+          return null;
+        })();
+
+        const firstOpexRow = termRows.find(r => r?.tenPSF && (
+          (r.tenPSF.taxes || 0) || (r.tenPSF.cam || 0) || (r.tenPSF.ins || 0) ||
+          (r.tenPSF.other || 0) || (r.tenPSF.mgmt || 0)
+        )) || termRows[0];
+        let opexStartPSF = null;
+        if (firstOpexRow && firstOpexRow.tenPSF) {
+          opexStartPSF =
+            (Number(firstOpexRow.tenPSF.taxes) || 0) +
+            (Number(firstOpexRow.tenPSF.cam) || 0) +
+            (Number(firstOpexRow.tenPSF.ins) || 0) +
+            (Number(firstOpexRow.tenPSF.other) || 0) +
+            (Number(firstOpexRow.tenPSF.mgmt) || 0);
+        }
+
+        let opexEscPct = null;
+        if (termRows.length && area > 0) {
+          const startYear = termRows[0]?.calYear;
+          if (Number.isFinite(startYear)) {
+            const rowsForYear = (yr) => termRows.filter(r => r?.calYear === yr && r.tenPSF);
+            const psfForYear = (yr) => {
+              const rows = rowsForYear(yr);
+              if (!rows.length) return null;
+              const total = rows.reduce((sum, r) => {
+                const val =
+                  (Number(r.tenPSF?.taxes) || 0) +
+                  (Number(r.tenPSF?.cam) || 0) +
+                  (Number(r.tenPSF?.ins) || 0) +
+                  (Number(r.tenPSF?.other) || 0) +
+                  (Number(r.tenPSF?.mgmt) || 0);
+                return sum + val;
+              }, 0);
+              return total / rows.length;
+            };
+            const year1 = psfForYear(startYear);
+            const year2 = psfForYear(startYear + 1);
+            if (year1 != null && year2 != null && Math.abs(year1) > 1e-6) {
+              opexEscPct = ((year2 - year1) / Math.abs(year1)) * 100;
+            }
+          }
+        }
+
+        const financedPrincipal = (llAllowTreatment === 'amort') ? llAllowanceApplied : 0;
+        const netTenantCashAtPos = (-totalCapex) + landlordFreeTICash + financedPrincipal;
+
         // attach the computed extras
         model.kpis = {
           freeGrossNominal, freeGrossPV, pctAbated,
@@ -2380,23 +2617,45 @@ window.addEventListener('load', initMap);
           totalIncentivePV,   // Free Rent (PV) + TI Offer (PV)
           llAllowanceOffered: llAllowTotal,
           llAllowTreatment: llAllowTreatment,                           // 'cash' | 'amort'
-          llFreeTIY0:      (llAllowTreatment === 'cash'  ? llAllowanceApplied : 0),
+          llFreeTIY0:      landlordFreeTICash,
           llFinancedTIY0:  (llAllowTreatment === 'amort' ? llAllowanceApplied : 0),
           totalCapex,              // NEW: Total Improvement Costs (for Build-Out Costs row)
-  
-  
+
+
           // A6 — expose TI amortization params for scenarios.js
           tiApr: llAllowApr,                              // annual (decimal)
           tiRateMonthly: Math.max(0, llAllowApr) / 12,    // monthly rate
-          termMonths: term                                // mirror so scenarios can read from kpis
+          termMonths: term,                               // mirror so scenarios can read from kpis
+
+          // Comparison summary helpers
+          startNetAnnualPSF: baseRent,
+          escalationPct: primaryEscPct,
+          totalBaseRentNominal,
+          avgMonthlyNet,
+          freeMonths: freeMonthsTotal,
+          freePlacement,
+          tiAllowanceTotal: llAllowTotal,
+          freeRentValueNominal: freeGrossNominal,
+          opexStartPSF,
+          opexEscalationPct: opexEscPct,
+          netTenantCashAtPos,
+          nerPV,
+          nerNonPV: nerSimple,
+          firstMonthRent: firstMonthGross,
+          lastMonthRent: lastMonthGross,
+          peakMonthly: peakMonthlyGross,
+          summaryChips: leaseTiming?.chips || [],
+          topline: kpis
         };
+
+        model.toplineKpis = kpis;
   
-    
+
         // update the new KPI cards (function you already defined above)
         updateExtraKpis(model);
-  
+
         // after building model
-        setTermChip(model); // works because the function checks data.termMonths
+        setTermChip(leaseTiming || model);
   
         // Store globally for charts/scenarios
         window.__ner_last = model;
@@ -3206,4 +3465,60 @@ window.addEventListener('load', initMap);
     window.buildLandlordSchedule = buildLandlordSchedule;
     window.summarizeGrossByPerspective = summarizeGrossByPerspective;
     window.renderScheduleTable = renderScheduleTable;
+
+    function wireSummaryToggle() {
+      const btnSummary = document.getElementById('btnSummary');
+      const btnCashflow = document.getElementById('btnCashflow');
+      const summaryPanel = document.getElementById('comparisonSummary');
+      const cashflowPanel = document.getElementById('cashflowPanel');
+      const hiddenWrap = document.getElementById('toggleHiddenRowsWrap');
+      const hiddenInput = document.getElementById('toggleHiddenRows');
+
+      if (!btnSummary || !btnCashflow || !summaryPanel || !cashflowPanel || !hiddenWrap || !hiddenInput) return;
+
+      const renderSummary = () => {
+        if (typeof window.renderComparisonSummary === 'function') {
+          window.renderComparisonSummary({ showHidden: hiddenInput.checked });
+        }
+      };
+
+      btnSummary.addEventListener('click', () => {
+        if (btnSummary.classList.contains('chip-active')) return;
+        btnSummary.classList.add('chip-active');
+        btnCashflow.classList.remove('chip-active');
+        summaryPanel.style.display = '';
+        cashflowPanel.style.display = 'none';
+        hiddenWrap.classList.remove('hidden');
+        renderSummary();
+      });
+
+      btnCashflow.addEventListener('click', () => {
+        if (btnCashflow.classList.contains('chip-active')) return;
+        btnCashflow.classList.add('chip-active');
+        btnSummary.classList.remove('chip-active');
+        summaryPanel.style.display = 'none';
+        cashflowPanel.style.display = '';
+        hiddenWrap.classList.add('hidden');
+      });
+
+      hiddenInput.addEventListener('change', () => {
+        if (summaryPanel.style.display !== 'none') {
+          renderSummary();
+        }
+      });
+
+      // Default state
+      btnSummary.classList.add('chip-active');
+      btnCashflow.classList.remove('chip-active');
+      summaryPanel.style.display = '';
+      cashflowPanel.style.display = 'none';
+      hiddenWrap.classList.remove('hidden');
+      renderSummary();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wireSummaryToggle);
+    } else {
+      wireSummaryToggle();
+    }
   })();
