@@ -168,6 +168,14 @@ function cfSetTooltip(td, unit, note) {
   }
 }
 
+function tiTreatment(model){
+  const raw = (model?.buildout?.treatment || model?.ti?.treatment || model?.tiTreatment || '').toLowerCase();
+  if (raw.includes('cash')) return 'cash';
+  if (raw.includes('amort')) return 'amortized';
+  if (raw.includes('financ')) return 'amortized';
+  return 'cash';
+}
+
 /* ---------- KPIs for left card ------------------------------------------ */
 function deriveKPIs(model) {
   const schedule = Array.isArray(model.schedule) ? model.schedule : [];
@@ -318,38 +326,40 @@ years.forEach(y => {
 
   // Extras from KPIs
   const kpis    = model.kpis || {};
-  const compareSeries = model.compareSeries || {};
-  const landlordFreeSeries = Array.isArray(compareSeries.landlordFreeTI) ? compareSeries.landlordFreeTI : [];
-  const freeTIAllowanceSeries = Array.isArray(compareSeries.freeTIAllowance) ? compareSeries.freeTIAllowance : landlordFreeSeries;
-  const landlordFreeTotals = seriesTotalsByYear(landlordFreeSeries, sched, allYears, y0);
-  const freeTIAllowanceTotals = seriesTotalsByYear(freeTIAllowanceSeries, sched, allYears, y0);
-
-  const freeSeriesHasData = landlordFreeSeries.some(v => Math.abs(v || 0) > 1e-6);
-  if (!freeSeriesHasData && (+kpis.llFreeTIY0 || 0)) {
-    landlordFreeTotals[y0] = (landlordFreeTotals[y0] || 0) + (+kpis.llFreeTIY0 || 0);
-  }
-
-  const allowanceSeriesHasData = freeTIAllowanceSeries.some(v => Math.abs(v || 0) > 1e-6);
-  if (!allowanceSeriesHasData && (+kpis.llFreeTIY0 || 0)) {
-    freeTIAllowanceTotals[y0] = (freeTIAllowanceTotals[y0] || 0) + (+kpis.llFreeTIY0 || 0);
-  }
-  const tiPrinYr = {}, tiIntYr = {};
-  years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
-
   // Derive TI total if only PSF given
   const tiPSF   = model?.tiAllowancePSF || 0;
   const sizeSF  = model?.spaceSize || 0;
   const tiCash  = model?.tiAllowanceTotal ?? (tiPSF * sizeSF);
-
-  const tiTreatment = model?.tiTreatment || 'cash';
-  const startYear = model?.startYear || Object.keys(model?.years || {})[0];
-  const parsedStartYear = Number(startYear);
-  const tiYearKey = (Number.isFinite(parsedStartYear) && allYears.includes(parsedStartYear)) ? parsedStartYear : y0;
+  const treatmentType = tiTreatment(model);
+  const isAmortizedLike = treatmentType === 'amortized';
   const perspectivePref = (localStorage.getItem('ner_perspective') || model.perspective || 'landlord');
 
+  const compareSeries = model.compareSeries || {};
+  const landlordFreeSeries = Array.isArray(compareSeries.landlordFreeTI) ? compareSeries.landlordFreeTI : [];
+  const freeTIAllowanceSeries = Array.isArray(compareSeries.freeTIAllowance) ? compareSeries.freeTIAllowance : landlordFreeSeries;
+  let landlordFreeTotals = seriesTotalsByYear(landlordFreeSeries, sched, allYears, y0);
+  let freeTIAllowanceTotals = seriesTotalsByYear(freeTIAllowanceSeries, sched, allYears, y0);
+
+  const financedPrincipal = Math.max(0, +kpis.llFinancedTIY0 || 0);
+  const kpiFreeTIY0 = Math.max(0, +kpis.llFreeTIY0 || 0);
+  const totalAllowance = Math.max(0, tiCash || 0);
+  let freeAllowanceY0 = isAmortizedLike ? Math.max(0, totalAllowance - financedPrincipal) : totalAllowance;
+  if (!freeAllowanceY0 && kpiFreeTIY0) freeAllowanceY0 = kpiFreeTIY0;
+
+  landlordFreeTotals = Object.fromEntries(allYears.map(y => [y, 0]));
+  freeTIAllowanceTotals = Object.fromEntries(allYears.map(y => [y, 0]));
+  landlordFreeTotals[y0] = freeAllowanceY0;
+  freeTIAllowanceTotals[y0] = freeAllowanceY0;
+  const tiPrinYr = {}, tiIntYr = {};
+  years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
+
 (function buildTiAmort() {
+  const zeroSchedule = Object.fromEntries(allYears.map(y => [y, 0]));
+  window.__ner_ti_addl_by_year = zeroSchedule;
+  if (!isAmortizedLike) return;
+
   // Inputs from kpis
-  const P0   = (+kpis.llFinancedTIY0 || 0);      // amount financed by LL (Y0 outlay)
+  const P0   = financedPrincipal;                // amount financed by LL (Y0 outlay)
   const pmt  = (+kpis.tiAmortPmt || 0);          // monthly “Additional TI Rent” charge
   const r_m  = (+kpis.tiRateMonthly || 0);       // monthly rate (decimal)
   const Nmax = (+kpis.termMonths || 0);          // # payments (matches term months)
@@ -361,8 +371,7 @@ years.forEach(y => {
 
   // Ensure these maps exist
   years.forEach(y => { tiPrinYr[y] = tiPrinYr[y] || 0; tiIntYr[y] = tiIntYr[y] || 0; });
-  var addlTIYr = {};              // <-- full monthly payment (P+I) by year
-  years.forEach(y => addlTIYr[y] = 0);
+  const addlTIYr = { ...zeroSchedule };              // <-- full monthly payment (P+I) by year
 
   for (const row of sched) {
     if (!row.isTermMonth) continue;
@@ -399,12 +408,12 @@ years.forEach(y => {
     const llAllowFunded  = +kpis.llAllowanceApplied || 0;
     const tenantImpr     = +kpis.tenantContribution || 0;
 
-    tiFunding[y]    = tiAmortPmt ? (tiAmortPmt * m) : 0;  // 0 for Y0 automatically
+    tiFunding[y]    = (isAmortizedLike && tiAmortPmt) ? (tiAmortPmt * m) : 0;  // 0 for Y0 automatically
   });
 
   // one-time items at Y0
   commYr[y0]       = +kpis.commissionNominal || 0;
-  allowYr[y0] = -((+kpis.llAllowanceOffered || +kpis.llAllowanceApplied) || 0);
+  allowYr[y0] = -freeAllowanceY0;
   tenantImprYr[y0] = -(+kpis.tenantContribution || 0);     // Tenant outflow (used in tenant view)
   commYr[y0]       = +kpis.commissionNominal || 0;
   tenantImprYr[y0] = -(+kpis.tenantContribution || 0);
@@ -542,7 +551,7 @@ const addToMapGlobal = (target, source, yearsArr) => {
   // Tenant view CapEx pieces
 const allowYrTenant = {};
 allYears.forEach(y => {
-  allowYrTenant[y] = (y === y0) ? ((+kpis.llAllowanceOffered || +kpis.llAllowanceApplied) || 0) : 0;
+  allowYrTenant[y] = (y === y0) ? freeAllowanceY0 : 0;
 });
 const capexTotalTenant = {};
 allYears.forEach(y => {
@@ -563,8 +572,7 @@ if (perspective === 'tenant') {
 
   // ── Upfront / Possession (Y0 only) ─────────────────────────────────────
   const totalCapex = +kpis.totalCapex || 0;              // Total Improvement Costs
-  const freeTIY0   = +kpis.llFreeTIY0     || 0;          // landlord free TI in Y0
-  const finTIY0    = +kpis.llFinancedTIY0 || 0;          // landlord financed TI in Y0
+  const finTIY0    = financedPrincipal;                  // landlord financed TI in Y0
 
   const buildOutYr = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -totalCapex : 0)])); // negative (tenant outflow)
   const freeTIYr   = Object.fromEntries(allYears.map(y => [y, landlordFreeTotals[y] || 0]));  // positive (LL covers)
@@ -718,7 +726,7 @@ allYears.forEach(y => {
 });
 
 // --- Initial TI Outlay (Y0 only): split Free vs Financed using kpis
-const financedTIY0 = (+kpis.llFinancedTIY0 || 0);
+const financedTIY0 = financedPrincipal;
 
 const initFree = Object.fromEntries(allYears.map(y => [y, -(freeTIAllowanceTotals[y] || 0)]));
 const initFin  = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -financedTIY0 : 0)]));
