@@ -2420,6 +2420,16 @@ body {
     text-align: right;
 }
 
+.subtotal-toggle .chevron {
+    display: inline-block;
+    transition: transform .18s ease;
+    transform: rotate(0deg);
+}
+
+.subtotal-toggle.expanded .chevron {
+    transform: rotate(180deg);
+}
+
 .cf-mini tfoot td {
     padding: 10px 12px;
     border-top: 1px solid var(--border-1);
@@ -3392,4 +3402,32 @@ th .hdr-note {
     height: 42px;
     display: block;
     filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .35));
+}
+
+.show-hidden-toggle {
+  display: inline-flex;
+  gap: .5rem;
+  align-items: center;
+  margin-left: .75rem;
+  opacity: .85;
+}
+
+.pill {
+  font-size: .7rem;
+  padding: .15rem .4rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.pill-muted {
+  opacity: .9;
+}
+
+td[data-unit] {
+  position: relative;
+}
+
+td[data-unit][title] {
+  cursor: help;
 }
