@@ -2483,6 +2483,78 @@ window.addEventListener('load', initMap);
           leaseEndEl.textContent = endLabel;
         }
 
+        // Summary metrics for comparison views
+        const termRows = schedule.filter(row => row && row.isTermMonth);
+        let firstMonthGross = 0;
+        let lastMonthGross = 0;
+        let peakMonthlyGross = 0;
+        if (termRows.length) {
+          firstMonthGross = Number(termRows[0]?.grossTotal || 0);
+          lastMonthGross = Number(termRows[termRows.length - 1]?.grossTotal || 0);
+          peakMonthlyGross = termRows.reduce((max, row) => {
+            const val = Number(row?.grossTotal || 0);
+            return val > max ? val : max;
+          }, 0);
+        }
+
+        let totalBaseRentNominal = 0;
+        schedule.forEach(row => {
+          if (!row || !row.isTermMonth) return;
+          const paidBase = (+row.preBase$ || 0) - (+row.freeBase$ || 0);
+          totalBaseRentNominal += paidBase;
+        });
+
+        const freeMonthsTotal = Math.max(0, (freeMonths || 0) + (customPatternMonths || 0));
+        const primaryEscPct = (() => {
+          if (escMode === 'pct') return escalation * 100;
+          if (escMode === 'custom_pct' && escPctList.length) return escPctList[0] * 100;
+          return null;
+        })();
+
+        const firstOpexRow = termRows.find(r => r?.tenPSF && (
+          (r.tenPSF.taxes || 0) || (r.tenPSF.cam || 0) || (r.tenPSF.ins || 0) ||
+          (r.tenPSF.other || 0) || (r.tenPSF.mgmt || 0)
+        )) || termRows[0];
+        let opexStartPSF = null;
+        if (firstOpexRow && firstOpexRow.tenPSF) {
+          opexStartPSF =
+            (Number(firstOpexRow.tenPSF.taxes) || 0) +
+            (Number(firstOpexRow.tenPSF.cam) || 0) +
+            (Number(firstOpexRow.tenPSF.ins) || 0) +
+            (Number(firstOpexRow.tenPSF.other) || 0) +
+            (Number(firstOpexRow.tenPSF.mgmt) || 0);
+        }
+
+        let opexEscPct = null;
+        if (termRows.length && area > 0) {
+          const startYear = termRows[0]?.calYear;
+          if (Number.isFinite(startYear)) {
+            const rowsForYear = (yr) => termRows.filter(r => r?.calYear === yr && r.tenPSF);
+            const psfForYear = (yr) => {
+              const rows = rowsForYear(yr);
+              if (!rows.length) return null;
+              const total = rows.reduce((sum, r) => {
+                const val =
+                  (Number(r.tenPSF?.taxes) || 0) +
+                  (Number(r.tenPSF?.cam) || 0) +
+                  (Number(r.tenPSF?.ins) || 0) +
+                  (Number(r.tenPSF?.other) || 0) +
+                  (Number(r.tenPSF?.mgmt) || 0);
+                return sum + val;
+              }, 0);
+              return total / rows.length;
+            };
+            const year1 = psfForYear(startYear);
+            const year2 = psfForYear(startYear + 1);
+            if (year1 != null && year2 != null && Math.abs(year1) > 1e-6) {
+              opexEscPct = ((year2 - year1) / Math.abs(year1)) * 100;
+            }
+          }
+        }
+
+        const financedPrincipal = (llAllowTreatment === 'amort') ? llAllowanceApplied : 0;
+        const netTenantCashAtPos = (-totalCapex) + landlordFreeTICash + financedPrincipal;
+
         // attach the computed extras
         model.kpis = {
           freeGrossNominal, freeGrossPV, pctAbated,
@@ -2502,12 +2574,31 @@ window.addEventListener('load', initMap);
           llFreeTIY0:      landlordFreeTICash,
           llFinancedTIY0:  (llAllowTreatment === 'amort' ? llAllowanceApplied : 0),
           totalCapex,              // NEW: Total Improvement Costs (for Build-Out Costs row)
-  
-  
+
+
           // A6 — expose TI amortization params for scenarios.js
           tiApr: llAllowApr,                              // annual (decimal)
           tiRateMonthly: Math.max(0, llAllowApr) / 12,    // monthly rate
-          termMonths: term                                // mirror so scenarios can read from kpis
+          termMonths: term,                               // mirror so scenarios can read from kpis
+
+          // Comparison summary helpers
+          startNetAnnualPSF: baseRent,
+          escalationPct: primaryEscPct,
+          totalBaseRentNominal,
+          avgMonthlyNet,
+          freeMonths: freeMonthsTotal,
+          freePlacement,
+          tiAllowanceTotal: llAllowTotal,
+          freeRentValueNominal: freeGrossNominal,
+          opexStartPSF,
+          opexEscalationPct: opexEscPct,
+          netTenantCashAtPos,
+          nerPV,
+          nerNonPV: nerSimple,
+          firstMonthRent: firstMonthGross,
+          lastMonthRent: lastMonthGross,
+          peakMonthly: peakMonthlyGross,
+          summaryChips: leaseTiming?.chips || []
         };
   
 
@@ -3325,4 +3416,60 @@ window.addEventListener('load', initMap);
     window.buildLandlordSchedule = buildLandlordSchedule;
     window.summarizeGrossByPerspective = summarizeGrossByPerspective;
     window.renderScheduleTable = renderScheduleTable;
+
+    function wireSummaryToggle() {
+      const btnSummary = document.getElementById('btnSummary');
+      const btnCashflow = document.getElementById('btnCashflow');
+      const summaryPanel = document.getElementById('comparisonSummary');
+      const cashflowPanel = document.getElementById('cashflowPanel');
+      const hiddenWrap = document.getElementById('toggleHiddenRowsWrap');
+      const hiddenInput = document.getElementById('toggleHiddenRows');
+
+      if (!btnSummary || !btnCashflow || !summaryPanel || !cashflowPanel || !hiddenWrap || !hiddenInput) return;
+
+      const renderSummary = () => {
+        if (typeof window.renderComparisonSummary === 'function') {
+          window.renderComparisonSummary({ showHidden: hiddenInput.checked });
+        }
+      };
+
+      btnSummary.addEventListener('click', () => {
+        if (btnSummary.classList.contains('chip-active')) return;
+        btnSummary.classList.add('chip-active');
+        btnCashflow.classList.remove('chip-active');
+        summaryPanel.style.display = '';
+        cashflowPanel.style.display = 'none';
+        hiddenWrap.classList.remove('hidden');
+        renderSummary();
+      });
+
+      btnCashflow.addEventListener('click', () => {
+        if (btnCashflow.classList.contains('chip-active')) return;
+        btnCashflow.classList.add('chip-active');
+        btnSummary.classList.remove('chip-active');
+        summaryPanel.style.display = 'none';
+        cashflowPanel.style.display = '';
+        hiddenWrap.classList.add('hidden');
+      });
+
+      hiddenInput.addEventListener('change', () => {
+        if (summaryPanel.style.display !== 'none') {
+          renderSummary();
+        }
+      });
+
+      // Default state
+      btnSummary.classList.add('chip-active');
+      btnCashflow.classList.remove('chip-active');
+      summaryPanel.style.display = '';
+      cashflowPanel.style.display = 'none';
+      hiddenWrap.classList.remove('hidden');
+      renderSummary();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wireSummaryToggle);
+    } else {
+      wireSummaryToggle();
+    }
   })();

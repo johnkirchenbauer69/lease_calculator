@@ -1298,16 +1298,31 @@
       <!-- Let JS populate 1..10 to avoid mismatched markup -->
       <select id="compareCount"></select>
     </div>
-    <label class="show-hidden-toggle">
-      <input id="showHiddenRows" type="checkbox" />
-      Show hidden rows
-    </label>
   </div>
 
   <div id="compareGrid" class="compare-grid"></div>
 
-  <!-- Annual rent cash-flow compare (renders when ≥1 scenarios are pinned) -->
-  <div id="cashflowCompare" class="cf-compare" style="margin-top:18px;"></div>
+  <div class="compare-toggle">
+    <button id="btnSummary" class="chip chip-tab chip-active">Comparison Summary</button>
+    <button id="btnCashflow" class="chip chip-tab">Cash Flow Comparison</button>
+    <div class="spacer"></div>
+    <label class="toggle hidden" id="toggleHiddenRowsWrap">
+      <input type="checkbox" id="toggleHiddenRows" />
+      <span>Show hidden rows</span>
+    </label>
+  </div>
+
+  <section id="comparisonSummary" class="compare-panel"></section>
+
+  <section id="cashflowPanel" class="compare-panel" style="display:none;">
+    <label class="show-hidden-toggle">
+      <input id="showHiddenRows" type="checkbox" />
+      Show hidden rows
+    </label>
+
+    <!-- Annual rent cash-flow compare (renders when ≥1 scenarios are pinned) -->
+    <div id="cashflowCompare" class="cf-compare" style="margin-top:18px;"></div>
+  </section>
 </section>
 
 

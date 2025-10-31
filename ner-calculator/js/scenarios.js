@@ -18,6 +18,15 @@ function isStaleModel(m) {
   return (r.preBase$ == null || r.freeBase$ == null || r.recoveries$ == null || r.llOpex$ == null);
 }
 
+function scenarioTitle(model, idx) {
+  if (!model) return `Scenario ${idx + 1}`;
+  const candidates = [model.name, model.title, model.suite, model.propertyName, model.propertyLabel, model.address, model.propertyAddress];
+  for (const cand of candidates) {
+    if (typeof cand === 'string' && cand.trim()) return cand.trim();
+  }
+  return `Scenario ${idx + 1}`;
+}
+
 /* ---------- compare slots & storage -------------------------------------- */
 const MAX_SLOTS = 10;
 const COMPARE_COUNT_KEY = 'ner_compare_n';
@@ -174,6 +183,49 @@ function tiTreatment(model){
   if (raw.includes('amort')) return 'amortized';
   if (raw.includes('financ')) return 'amortized';
   return 'cash';
+}
+
+// ====== FORMATTER FALLBACKS (use existing if they exist) ======
+const _fmtMoney = (typeof fmtMoney === 'function') ? fmtMoney : (v) => {
+  if (v == null || Number.isNaN(v)) return '—';
+  const num = Number(v);
+  const neg = num < 0;
+  const abs = Math.abs(num).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return neg ? `($${abs})` : `$${abs}`;
+};
+const _fmtPSF = (typeof fmtPSF === 'function') ? fmtPSF : (v) => {
+  if (v == null || Number.isNaN(v)) return '—';
+  return `$${Number(v).toFixed(2)}`;
+};
+const _fmtPct = (typeof fmtPct === 'function') ? fmtPct : (v) => {
+  if (v == null || Number.isNaN(v)) return '—';
+  return `${Number(v).toFixed(1)}%`;
+};
+const _fmtInt = (v) => {
+  if (v == null || Number.isNaN(v)) return '—';
+  return String(Math.round(v));
+};
+
+// ====== BEST-IN-ROW EVAL ======
+function pickBest(values, better = 'lower') {
+  const arr = values.map(v => {
+    const num = Number(v);
+    return Number.isFinite(num) ? num : null;
+  });
+  let bestIdx = -1;
+  let bestVal = null;
+  arr.forEach((val, idx) => {
+    if (val == null) return;
+    if (bestIdx === -1) { bestIdx = idx; bestVal = val; return; }
+    if (better === 'higher') {
+      if (val > bestVal) { bestIdx = idx; bestVal = val; }
+    } else if (better === 'abs-lower') {
+      if (Math.abs(val) < Math.abs(bestVal)) { bestIdx = idx; bestVal = val; }
+    } else {
+      if (val < bestVal) { bestIdx = idx; bestVal = val; }
+    }
+  });
+  return bestIdx;
 }
 
 /* ---------- KPIs for left card ------------------------------------------ */
@@ -982,13 +1034,29 @@ function renderCompareGrid() {
   const count = getCompareCount();
   updateCompareTitle(count);
 
+  const compareModels = [];
   let html = '';
   for (let i = 0; i < count; i++) {
     let m = store[i];
     if (!m || isStaleModel(m)) m = window.__ner_last || m; // prefer live model if stale
+    if (m && Array.isArray(m.schedule) && m.schedule.length) {
+      compareModels.push({
+        model: m,
+        title: scenarioTitle(m, i),
+        photoUrl: m.photoDataURL || null,
+        slot: i,
+        kpi: m.kpis || null
+      });
+    }
     html += m ? renderScenarioRow(i, m) : renderEmptyRow(i);
   }
   host.innerHTML = html;
+
+  window.__compareModels = compareModels;
+  const summaryToggle = document.getElementById('toggleHiddenRows');
+  if (typeof window.renderComparisonSummary === 'function') {
+    window.renderComparisonSummary({ showHidden: !!summaryToggle?.checked });
+  }
 
   host.querySelectorAll('td[data-unit], td[data-note]').forEach(td => {
     cfSetTooltip(td, td.dataset.unit, td.dataset.note);
@@ -1014,6 +1082,331 @@ function renderCompareGrid() {
   host.querySelectorAll('.scenario-toolbar .btn, .scenario-toolbar .pin-btn')
       .forEach(btn => btn.addEventListener('click', onToolbarClick));
 }
+
+// ====== COMPARISON SUMMARY ======
+(function(){
+  function _getCompareModels() {
+    return Array.isArray(window.__compareModels) ? window.__compareModels : [];
+  }
+
+  function currentPerspective() {
+    try {
+      const stored = localStorage.getItem('ner_perspective');
+      return stored === 'tenant' ? 'tenant' : 'landlord';
+    } catch (_) {
+      return 'landlord';
+    }
+  }
+
+  const escapeHtml = (str = '') => String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const chip = (txt, cls = '') => `<span class="chip ${cls}">${escapeHtml(txt)}</span>`;
+  const photo = (url) => {
+    if (!url) return '';
+    const safe = escapeHtml(url);
+    return `<img class="photo" src="${safe}" alt="Scenario photo" onerror="this.style.display='none'">`;
+  };
+
+  function formatPlacementText(raw) {
+    if (!raw) return '';
+    const lower = String(raw).toLowerCase();
+    if (lower === 'outside') return 'outside the term';
+    if (lower === 'inside') return 'inside the term';
+    return raw;
+  }
+
+  function computeKpisForModel(modelLike, meta) {
+    const model = modelLike || {};
+    const raw = model.kpis || {};
+    const timing = (typeof window.getLeaseTimingSummary === 'function')
+      ? window.getLeaseTimingSummary(model)
+      : null;
+
+    const toNumber = (val) => {
+      const num = Number(val);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    const termMonths = toNumber(raw.termMonths ?? timing?.termMonths ?? model.termMonths);
+    const freeMonths = toNumber(raw.freeMonths ?? timing?.freeMonths ?? 0);
+    const freePlacement = (raw.freePlacement || timing?.freePlacement || '').toLowerCase() || null;
+    const startNet = toNumber(raw.startNetAnnualPSF ?? model.startNetAnnualPSF);
+    const escalationPct = toNumber(raw.escalationPct);
+    const totalBaseRent = toNumber(raw.totalBaseRentNominal ?? model.totalPaidNet);
+    const freeRentValue = toNumber(raw.freeRentValueNominal ?? raw.freeGrossNominal);
+    const avgMonthlyNet = toNumber(raw.avgMonthlyNet ?? model.avgNetMonthly);
+    const opexStartPSF = toNumber(raw.opexStartPSF);
+    const opexEscPct = toNumber(raw.opexEscalationPct);
+    const tiAllowance = toNumber(raw.tiAllowanceTotal);
+    const netTenantCashAtPos = toNumber(raw.netTenantCashAtPos);
+    const nerPVVal = toNumber(raw.nerPV ?? model.nerPV);
+    const nerNonPVVal = toNumber(raw.nerNonPV ?? model.simpleNet);
+    const firstMonthRent = toNumber(raw.firstMonthRent);
+    const lastMonthRent = toNumber(raw.lastMonthRent);
+    const peakMonthly = toNumber(raw.peakMonthly);
+    const chipsRaw = Array.isArray(raw.summaryChips) && raw.summaryChips.length
+      ? raw.summaryChips
+      : (timing?.chips || []);
+
+    return {
+      termMonths,
+      freeMonths,
+      freePlacement,
+      startNet,
+      escalationPct,
+      totalBaseRent,
+      freeRentValue,
+      avgMonthlyNet,
+      opexStartPSF,
+      opexEscPct,
+      tiAllowance,
+      netTenantCashAtPos,
+      nerPV: nerPVVal,
+      nerNonPV: nerNonPVVal,
+      firstMonthRent,
+      lastMonthRent,
+      peakMonthly,
+      chips: chipsRaw,
+      title: meta?.title || scenarioTitle(model, meta?.slot ?? 0),
+      photoUrl: meta?.photoUrl || model.photoDataURL || null,
+      slot: meta?.slot
+    };
+  }
+
+  const METRICS = [
+    { key: 'term', group: 'Deal Basics', label: 'Term (months)',
+      better: { tenant: 'lower', landlord: 'lower' },
+      calc: ({ kpi }) => kpi.termMonths,
+      fmt: (v) => _fmtInt(v)
+    },
+    { key: 'freeMonths', group: 'Deal Basics', label: 'Free Months (inside/outside)',
+      better: { tenant: 'higher', landlord: 'lower' },
+      calc: ({ kpi }) => kpi.freeMonths,
+      fmt: (v, ctx) => {
+        const base = _fmtInt(v);
+        if (base === '—') return base;
+        const placement = ctx.kpi.freePlacement
+          ? chip(formatPlacementText(ctx.kpi.freePlacement), ctx.kpi.freePlacement === 'outside' ? 'red' : '')
+          : '';
+        return placement ? `${base} ${placement}` : base;
+      }
+    },
+    { key: 'startRate', group: 'Deal Basics', label: 'Start Net Rate ($/SF/yr)',
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.startNet,
+      fmt: _fmtPSF
+    },
+    { key: 'escalation', group: 'Deal Basics', label: 'Escalation',
+      better: { tenant: 'lower', landlord: 'lower' },
+      calc: ({ kpi }) => kpi.escalationPct,
+      fmt: _fmtPct
+    },
+    { key: 'totalBase', group: 'Rent Totals', label: 'Total Base Rent ($)',
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.totalBaseRent,
+      fmt: _fmtMoney
+    },
+    { key: 'freeVal', group: 'Rent Totals', label: 'Free Rent Value ($)',
+      better: { tenant: 'higher', landlord: 'higher' },
+      calc: ({ kpi, perspective }) => {
+        const val = kpi.freeRentValue || 0;
+        return perspective === 'landlord' ? -val : val;
+      },
+      fmt: _fmtMoney
+    },
+    { key: 'avgNet', group: 'Rent Totals', label: 'Avg Monthly Net ($)',
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.avgMonthlyNet,
+      fmt: _fmtMoney
+    },
+    { key: 'opexStart', group: 'OpEx / Recoveries', label: 'OpEx Start ($/SF/yr)',
+      better: { tenant: 'lower', landlord: 'lower' },
+      calc: ({ kpi }) => kpi.opexStartPSF,
+      fmt: _fmtPSF
+    },
+    { key: 'opexEsc', group: 'OpEx / Recoveries', label: 'OpEx Escalation',
+      better: { tenant: 'lower', landlord: 'lower' },
+      calc: ({ kpi }) => kpi.opexEscPct,
+      fmt: _fmtPct
+    },
+    { key: 'tiAllowance', group: 'TI & Cash at Possession', label: 'TI Allowance (Free TI) ($)',
+      better: { tenant: 'higher', landlord: 'higher' },
+      calc: ({ kpi, perspective }) => {
+        const val = kpi.tiAllowance || 0;
+        return perspective === 'landlord' ? -val : val;
+      },
+      fmt: _fmtMoney
+    },
+    { key: 'tenantCash', group: 'TI & Cash at Possession', label: 'Net Tenant Cash Due at Possession ($)',
+      better: { tenant: 'abs-lower', landlord: 'abs-lower' },
+      calc: ({ kpi, perspective }) => {
+        const val = kpi.netTenantCashAtPos || 0;
+        return perspective === 'landlord' ? -val : val;
+      },
+      fmt: _fmtMoney
+    },
+    { key: 'nerPV', group: 'Effective Economics', label: 'NER (PV) ($/SF/yr)',
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.nerPV,
+      fmt: _fmtPSF
+    },
+    { key: 'ner', group: 'Effective Economics', label: 'NER (non-PV) ($/SF/yr)',
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.nerNonPV,
+      fmt: _fmtPSF
+    },
+    { key: 'first', group: 'First / Last / Peak', label: "First Month's Rent ($)",
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.firstMonthRent,
+      fmt: _fmtMoney
+    },
+    { key: 'last', group: 'First / Last / Peak', label: "Last Month's Rent ($)",
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.lastMonthRent,
+      fmt: _fmtMoney
+    },
+    { key: 'peak', group: 'First / Last / Peak', label: 'Peak Monthly Obligation ($)',
+      better: { tenant: 'lower', landlord: 'higher' },
+      calc: ({ kpi }) => kpi.peakMonthly,
+      fmt: _fmtMoney
+    }
+  ];
+
+  function shouldHideRow(values) {
+    return values.every(v => {
+      if (v == null) return true;
+      const num = Number(v);
+      if (!Number.isFinite(num)) return true;
+      return Math.abs(num) < 1e-6;
+    });
+  }
+
+  function resolveBetter(metric, perspective) {
+    if (!metric || !metric.better) return 'lower';
+    if (typeof metric.better === 'string') return metric.better;
+    return metric.better[perspective] || metric.better.landlord || 'lower';
+  }
+
+  function toSortValue(val, better, desc) {
+    if (val == null || !Number.isFinite(Number(val))) {
+      return desc ? -Infinity : Infinity;
+    }
+    const num = Number(val);
+    if (better === 'abs-lower') return Math.abs(num);
+    return num;
+  }
+
+  function buildSummaryTable(entries, { showHidden = false, perspective }) {
+    const theadCols = entries.map(({ kpi }) => {
+      const chips = [
+        chip(`Term ${_fmtInt(kpi.termMonths)} mo`),
+        chip(`${_fmtInt(kpi.freeMonths ?? 0)} mo free`),
+        kpi.freePlacement ? chip(formatPlacementText(kpi.freePlacement), kpi.freePlacement === 'outside' ? 'red' : '') : ''
+      ].filter(Boolean).join(' ');
+      return `
+        <th class="col-card">
+          ${photo(kpi.photoUrl)}
+          <div style="margin-top:8px;font-weight:700">${escapeHtml(kpi.title || '')}</div>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+        </th>`;
+    }).join('');
+
+    const groups = [...new Set(METRICS.map(m => m.group))];
+    let tbodyHTML = '';
+
+    groups.forEach(group => {
+      tbodyHTML += `<tr class="group-row"><td class="metric-col" colspan="${entries.length + 1}">${group}</td></tr>`;
+      METRICS.filter(m => m.group === group).forEach(metric => {
+        const rawVals = entries.map(entry => metric.calc({ kpi: entry.kpi, model: entry.model, perspective }));
+        const hidden = shouldHideRow(rawVals);
+        if (hidden && !showHidden) return;
+        const better = resolveBetter(metric, perspective);
+        const bestIdx = pickBest(rawVals, better);
+        const labelCell = `<td class="metric-col sortable" data-metric="${metric.key}">${metric.label}</td>`;
+        const cells = rawVals.map((val, idx) => {
+          const ctx = entries[idx];
+          const formatted = metric.fmt ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective }) : (val ?? '—');
+          const numeric = Number(val);
+          const hasValue = Number.isFinite(numeric) && Math.abs(numeric) >= 1e-6;
+          const bestClass = (idx === bestIdx && hasValue) ? 'best' : '';
+          const dimClass = hasValue ? '' : 'dim';
+          return `<td class="${bestClass} ${dimClass}">${formatted}</td>`;
+        }).join('');
+        tbodyHTML += `<tr data-row="${metric.key}">${labelCell}${cells}</tr>`;
+      });
+    });
+
+    return `
+      <div class="summary-grid">
+        <table>
+          <thead>
+            <tr>
+              <th class="metric-col"></th>
+              ${theadCols}
+            </tr>
+          </thead>
+          <tbody>${tbodyHTML}</tbody>
+        </table>
+      </div>`;
+  }
+
+  window.renderComparisonSummary = function renderComparisonSummary({ showHidden = false } = {}) {
+    const mount = document.getElementById('comparisonSummary');
+    if (!mount) return;
+
+    const models = _getCompareModels();
+    if (!models.length) {
+      mount.innerHTML = '<div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div>';
+      return;
+    }
+
+    const perspective = currentPerspective();
+    const entries = models.map((meta, idx) => {
+      const model = meta.model || meta;
+      const kpi = computeKpisForModel(model, meta);
+      return { model, kpi: { ...kpi, title: kpi.title || scenarioTitle(model, meta.slot ?? idx), photoUrl: kpi.photoUrl }, meta };
+    });
+
+    const sortState = window.__summarySort || { metric: null, desc: false };
+    const metricDef = sortState.metric ? METRICS.find(m => m.key === sortState.metric) : null;
+    let ordered = entries.slice();
+    if (metricDef) {
+      const better = resolveBetter(metricDef, perspective);
+      ordered.sort((a, b) => {
+        const va = metricDef.calc({ kpi: a.kpi, model: a.model, perspective });
+        const vb = metricDef.calc({ kpi: b.kpi, model: b.model, perspective });
+        const svA = toSortValue(va, better, sortState.desc);
+        const svB = toSortValue(vb, better, sortState.desc);
+        return sortState.desc ? (svB - svA) : (svA - svB);
+      });
+    }
+
+    const html = buildSummaryTable(ordered, { showHidden, perspective });
+    mount.innerHTML = html;
+
+    mount.querySelectorAll('.metric-col.sortable').forEach(el => {
+      el.addEventListener('click', () => {
+        const key = el.dataset.metric;
+        if (!key) return;
+        const state = window.__summarySort || { metric: null, desc: false };
+        if (state.metric === key) {
+          state.desc = !state.desc;
+        } else {
+          state.metric = key;
+          state.desc = false;
+        }
+        window.__summarySort = state;
+        const toggle = document.getElementById('toggleHiddenRows');
+        window.renderComparisonSummary({ showHidden: !!toggle?.checked });
+      });
+    });
+  };
+})();
 
 /* ---------- boot ---------------------------------------------------------- */
 function bootScenarios() {
