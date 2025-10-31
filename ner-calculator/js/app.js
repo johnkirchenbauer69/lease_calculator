@@ -2147,6 +2147,18 @@ window.addEventListener('load', initMap);
         }
   
         hasOtherOpEx = totalOtherAnnualPSF > 0;
+
+        // -----------------------------------------------------------------------
+        // Cash-flow comparison helpers (Landlord Free TI / Allowance lines)
+        // -----------------------------------------------------------------------
+        const landlordFreeTI = Array(schedule.length + 1).fill(0);
+        const freeTIAllowance = Array(schedule.length + 1).fill(0);
+
+        if (llAllowTotal > 0) {
+          const freePortion = (llAllowTreatment === 'cash') ? llAllowanceApplied : 0;
+          landlordFreeTI[0] = freePortion;
+          freeTIAllowance[0] = freePortion;
+        }
   
         // -----------------------------------------------------------------------
         // KPIs (PV & simple)
@@ -2335,7 +2347,11 @@ window.addEventListener('load', initMap);
           totalPaidNet,
           totalPaidGross,
           schedule,
-  
+          compareSeries: {
+            landlordFreeTI,
+            freeTIAllowance
+          },
+
           serviceType: type,
           customExpenses: extraOpExRows.map(row => ({ ...row })),
           coreOpExModes: {

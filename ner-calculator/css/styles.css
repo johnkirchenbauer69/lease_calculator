@@ -2420,6 +2420,16 @@ body {
     text-align: right;
 }
 
+.subtotal-toggle .chevron {
+    display: inline-block;
+    transition: transform .18s ease;
+    transform: rotate(0deg);
+}
+
+.subtotal-toggle.expanded .chevron {
+    transform: rotate(180deg);
+}
+
 .cf-mini tfoot td {
     padding: 10px 12px;
     border-top: 1px solid var(--border-1);
