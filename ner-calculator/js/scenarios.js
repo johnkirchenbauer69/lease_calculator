@@ -206,6 +206,16 @@ const _fmtInt = (v) => {
   return String(Math.round(v));
 };
 
+function fmtDate(d) {
+  if (!d) return '—';
+  const date = d instanceof Date ? new Date(d.getTime()) : new Date(d);
+  if (Number.isNaN(date.getTime())) return '—';
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = date.getFullYear();
+  return `${mm}/${dd}/${yy}`;
+}
+
 // ====== BEST-IN-ROW EVAL ======
 function pickBest(values, better = 'lower') {
   const arr = values.map(v => {
@@ -1152,6 +1162,8 @@ function renderCompareGrid() {
     const chipsRaw = Array.isArray(raw.summaryChips) && raw.summaryChips.length
       ? raw.summaryChips
       : (timing?.chips || []);
+    const startDate = timing?.startDate || raw.startDate || model.startDate || model.commencementDate || null;
+    const endDate = timing?.endDate || raw.endDate || model.endDate || null;
 
     return {
       termMonths,
@@ -1172,6 +1184,8 @@ function renderCompareGrid() {
       lastMonthRent,
       peakMonthly,
       chips: chipsRaw,
+      startDate,
+      endDate,
       title: meta?.title || scenarioTitle(model, meta?.slot ?? 0),
       photoUrl: meta?.photoUrl || model.photoDataURL || null,
       slot: meta?.slot
@@ -1183,6 +1197,16 @@ function renderCompareGrid() {
       better: { tenant: 'lower', landlord: 'lower' },
       calc: ({ kpi }) => kpi.termMonths,
       fmt: (v) => _fmtInt(v)
+    },
+    { key: 'leaseRange', group: 'Deal Basics', label: 'Lease Start – End',
+      sortable: false,
+      better: 'none',
+      calc: ({ kpi }) => ({ start: kpi.startDate, end: kpi.endDate }),
+      fmt: (val) => {
+        const start = fmtDate(val?.start ?? val?.startDate);
+        const end = fmtDate(val?.end ?? val?.endDate);
+        return `${start} – ${end}`;
+      }
     },
     { key: 'freeMonths', group: 'Deal Basics', label: 'Free Months (inside/outside)',
       better: { tenant: 'higher', landlord: 'lower' },
@@ -1280,6 +1304,8 @@ function renderCompareGrid() {
   function shouldHideRow(values) {
     return values.every(v => {
       if (v == null) return true;
+      if (typeof v === 'string') return v.trim().length === 0;
+      if (typeof v === 'object') return false;
       const num = Number(v);
       if (!Number.isFinite(num)) return true;
       return Math.abs(num) < 1e-6;
@@ -1287,7 +1313,9 @@ function renderCompareGrid() {
   }
 
   function resolveBetter(metric, perspective) {
-    if (!metric || !metric.better) return 'lower';
+    if (!metric) return 'lower';
+    if (metric.better === 'none') return 'none';
+    if (!metric.better) return 'lower';
     if (typeof metric.better === 'string') return metric.better;
     return metric.better[perspective] || metric.better.landlord || 'lower';
   }
@@ -1326,15 +1354,28 @@ function renderCompareGrid() {
         const hidden = shouldHideRow(rawVals);
         if (hidden && !showHidden) return;
         const better = resolveBetter(metric, perspective);
-        const bestIdx = pickBest(rawVals, better);
-        const labelCell = `<td class="metric-col sortable" data-metric="${metric.key}">${metric.label}</td>`;
+        const bestIdx = better === 'none' ? -1 : pickBest(rawVals, better);
+        const sortableClass = metric.sortable === false ? '' : ' sortable';
+        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}">${metric.label}</td>`;
         const cells = rawVals.map((val, idx) => {
           const ctx = entries[idx];
           const formatted = metric.fmt ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective }) : (val ?? '—');
           const numeric = Number(val);
-          const hasValue = Number.isFinite(numeric) && Math.abs(numeric) >= 1e-6;
-          const bestClass = (idx === bestIdx && hasValue) ? 'best' : '';
-          const dimClass = hasValue ? '' : 'dim';
+          const isNumeric = Number.isFinite(numeric);
+          const numericHasValue = isNumeric && Math.abs(numeric) >= 1e-6;
+          let textualHasValue = false;
+          if (!isNumeric) {
+            if (val == null) {
+              textualHasValue = false;
+            } else if (typeof val === 'object') {
+              textualHasValue = true;
+            } else {
+              textualHasValue = String(val).trim().length > 0;
+            }
+          }
+          const hasDisplayValue = numericHasValue || textualHasValue;
+          const bestClass = (idx === bestIdx && numericHasValue) ? 'best' : '';
+          const dimClass = hasDisplayValue ? '' : 'dim';
           return `<td class="${bestClass} ${dimClass}">${formatted}</td>`;
         }).join('');
         tbodyHTML += `<tr data-row="${metric.key}">${labelCell}${cells}</tr>`;

@@ -3507,6 +3507,27 @@ window.addEventListener('load', initMap);
         }
       }
 
+      (function moveHiddenRowsToggle() {
+        const root = document.getElementById('cashFlowComparison') || document.querySelector('#cashflowComparison');
+        if (!root) return;
+        const toggle = root.querySelector('#hiddenRowsToggleWrap');
+        const compare = root.querySelector('.compareCount');
+        if (!toggle || !compare) return;
+        let row = root.querySelector('.compare-controls');
+        if (!row) {
+          row = document.createElement('div');
+          row.className = 'compare-controls';
+          const parent = compare.parentNode;
+          if (parent) {
+            parent.insertBefore(row, compare);
+            row.appendChild(compare);
+          }
+        }
+        if (row) {
+          row.insertBefore(toggle, compare);
+        }
+      })();
+
       function renderSummaryIfNeeded() {
         if (typeof window.renderComparisonSummary === 'function') {
           const toggle = document.getElementById('toggleHiddenRows');
