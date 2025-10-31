@@ -3310,19 +3310,17 @@ body {
     position: relative;
 }
 
-/* ensures the chip can anchor inside */
-.kpi .chip.term-chip {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    padding: 2px 8px;
-    border-radius: 999px;
+.term-chip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.term-chip .chip {
     font-size: 12px;
     line-height: 1.2;
-    background: var(--panel-3, #2b2b2b);
-    border: 1px solid var(--stroke, #3a3a3a);
-    color: var(--text, #eaeaea);
-    opacity: .95;
+    padding: 2px 8px;
 }
 
 th .hdr-note {

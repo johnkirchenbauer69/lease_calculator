@@ -182,9 +182,18 @@ function deriveKPIs(model) {
   const months = schedule.length || 1;
   const netSum   = sumBy(schedule, 'netTotal');
   const grossSum = sumBy(schedule, 'grossTotal');
+  const timing = (typeof window.getLeaseTimingSummary === 'function')
+    ? window.getLeaseTimingSummary(model)
+    : null;
+  const fmtLeaseDate = (date, fallbackIso) => {
+    if (date instanceof Date && !Number.isNaN(date.getTime())) {
+      return date.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+    }
+    return ymToDateStr(fallbackIso);
+  };
   return {
-    leaseStarts: ymToDateStr(model.leaseStartISO),
-    leaseEnds:   ymToDateStr(model.leaseEndISO),
+    leaseStarts: fmtLeaseDate(timing?.startDate, model.leaseStartISO),
+    leaseEnds:   fmtLeaseDate(timing?.endDate, model.leaseEndISO),
     nerPV:       model.nerPV,
     nerSimple:   model.simpleNet,
     avgNetMonthly:   netSum / months,
