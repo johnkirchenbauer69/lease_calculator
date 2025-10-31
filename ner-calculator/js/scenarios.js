@@ -54,7 +54,7 @@ function getCompareCount() {
 }
 function updateCompareTitle(n) {
   const h = document.getElementById('scenarioCompareTitle');
-  if (h) h.textContent = `Scenario Comparison (1—${n})`;
+  if (h) h.textContent = `Cash Flow Comparison (1—${n})`;
 }
 function buildCompareCountSelect() {
   const sel = document.getElementById('compareCount');
@@ -96,15 +96,104 @@ function ymToDateStr(isoYM) {
 function sumBy(arr, key) { let s = 0; for (const r of arr) s += (+r[key] || 0); return s; }
 function monthsInYear(model, y) { return (model.schedule || []).filter(r => r.calYear === y).length || 0; }
 
+function seriesTotalsByYear(series, schedule, allYears, y0) {
+  const totals = Object.fromEntries(allYears.map(y => [y, 0]));
+  if (!Array.isArray(series) || series.length === 0) return totals;
+
+  const addToYear = (year, value) => {
+    if (year == null) return;
+    totals[year] = (totals[year] || 0) + Number(value || 0);
+  };
+
+  addToYear(y0, series[0] || 0);
+
+  for (let i = 1; i < series.length; i++) {
+    const row = schedule[i - 1];
+    if (!row) continue;
+    addToYear(row.calYear, series[i] || 0);
+  }
+
+  return totals;
+}
+
+// ---- Cashflow helpers (lightweight; no refactor)
+const CF_CORE_KEYS = new Set([
+  'base_rent','total_base','rent_recoveries_total','noi',
+  'tenant_nnn_opex','total_occupancy_cost','cumulative_cash_flow'
+]);
+
+function cfSum(obj) { return Object.values(obj || {}).reduce((a,b)=>a + (+b || 0), 0); }
+
+function cfShouldHideRow(row, showHidden) {
+  if (showHidden) return false;
+  if (row.isSubtotal) return false;
+  if (CF_CORE_KEYS.has(row.key)) return false;
+  return Math.abs(cfSum(row.amountsByYear)) < 1e-8;
+}
+
+// resp: 'tenant' | 'landlord' | 'split'
+function cfRoute(view, resp) {
+  if (resp === 'tenant')   return view === 'tenant'   ? 'show' : 'hide';
+  if (resp === 'landlord') return view === 'landlord' ? 'show' : 'hide';
+  if (resp === 'split')    return 'split';
+  return 'show';
+}
+
+function cfBadgeText(resp, pct) {
+  if (resp === 'tenant')   return 'Tenant-paid';
+  if (resp === 'landlord') return 'LL-paid';
+  if (resp === 'split')    return `Split ${Math.round((pct ?? .5)*100)}%`;
+  return '';
+}
+
+// amountsByYear: { [year]: number }, share: 0..1
+function cfShare(amountsByYear, share) {
+  const out = {};
+  for (const [y,v] of Object.entries(amountsByYear || {})) out[y] = (+v||0) * (share ?? .5);
+  return out;
+}
+
+function cfSetTooltip(td, unit, note) {
+  if (!td) return;
+  if (unit) td.dataset.unit = unit;
+  if (note) {
+    try {
+      const decoded = decodeURIComponent(note);
+      td.title = decoded;
+      td.dataset.note = decoded;
+    } catch (_) {
+      td.title = note;
+      td.dataset.note = note;
+    }
+  }
+}
+
+function tiTreatment(model){
+  const raw = (model?.buildout?.treatment || model?.ti?.treatment || model?.tiTreatment || '').toLowerCase();
+  if (raw.includes('cash')) return 'cash';
+  if (raw.includes('amort')) return 'amortized';
+  if (raw.includes('financ')) return 'amortized';
+  return 'cash';
+}
+
 /* ---------- KPIs for left card ------------------------------------------ */
 function deriveKPIs(model) {
   const schedule = Array.isArray(model.schedule) ? model.schedule : [];
   const months = schedule.length || 1;
   const netSum   = sumBy(schedule, 'netTotal');
   const grossSum = sumBy(schedule, 'grossTotal');
+  const timing = (typeof window.getLeaseTimingSummary === 'function')
+    ? window.getLeaseTimingSummary(model)
+    : null;
+  const fmtLeaseDate = (date, fallbackIso) => {
+    if (date instanceof Date && !Number.isNaN(date.getTime())) {
+      return date.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+    }
+    return ymToDateStr(fallbackIso);
+  };
   return {
-    leaseStarts: ymToDateStr(model.leaseStartISO),
-    leaseEnds:   ymToDateStr(model.leaseEndISO),
+    leaseStarts: fmtLeaseDate(timing?.startDate, model.leaseStartISO),
+    leaseEnds:   fmtLeaseDate(timing?.endDate, model.leaseEndISO),
     nerPV:       model.nerPV,
     nerSimple:   model.simpleNet,
     avgNetMonthly:   netSum / months,
@@ -115,11 +204,59 @@ function deriveKPIs(model) {
 }
 
 /* ---------- mini annual table (right side) ------------------------------- */
-function buildMiniTableHTML(model) {
+function buildMiniTableHTML(model, opts = {}) {
   const sched = Array.isArray(model.schedule) ? model.schedule : [];
-  const yearsSet = new Set(sched.map(r => r.calYear));
-  const years = [...yearsSet].sort((a,b)=>a-b);
   const hasOther = !!model.hasOtherOpEx;
+  const showHidden = document.getElementById('showHiddenRows')?.checked;
+  const renderedRowKeys = new Set();
+
+  // ---- ensure years are known BEFORE any use
+  // Try several sources; take the first non-empty; then sort ascending.
+  const yearsFromModel =
+    (model?.years && Object.keys(model.years)) ||
+    (model?.annualYears && [...model.annualYears]) ||
+    (model?.headers?.years && [...model.headers.years]) ||
+    (model?.scheduleAnnual && Object.keys(model.scheduleAnnual)) ||
+    null;
+
+  // We also allow the caller to pass a years list via opts if present.
+  const yearsFromOpts = (opts && Array.isArray(opts.years) && opts.years.length ? [...opts.years] : null);
+
+  // Fallback: infer from known series if everything else is empty
+  function keysIf(obj) { return obj ? Object.keys(obj) : []; }
+  const yearsFromSeries = (
+    keysIf(model?.baseRentByYear).length ? keysIf(model.baseRentByYear) :
+    keysIf(model?.taxesByYear).length ? keysIf(model.taxesByYear) :
+    keysIf(model?.camByYear).length ? keysIf(model.camByYear) :
+    keysIf(model?.insuranceByYear).length ? keysIf(model.insuranceByYear) :
+    keysIf(model?.mgmtFeeByYear).length ? keysIf(model.mgmtFeeByYear) :
+    []
+  );
+
+  // Choose the winner and normalize to sorted numeric-ish strings
+  let allYearCandidates = (yearsFromOpts || yearsFromModel || yearsFromSeries || []).map(String);
+  allYearCandidates = [...new Set(allYearCandidates)].sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
+
+  // Guard: if still empty, derive a single start year so downstream code won’t crash
+  if (allYearCandidates.length === 0) {
+    const start = (model?.startYear) || new Date().getFullYear();
+    allYearCandidates = [String(start)];
+  }
+
+  const scheduleYears = [...new Set(sched.map(r => r.calYear).filter(y => y != null))].sort((a, b) => a - b);
+  let years = scheduleYears.slice();
+  if (!years.length) {
+    years = allYearCandidates
+      .map(y => parseInt(y, 10))
+      .filter(n => Number.isFinite(n));
+    years = [...new Set(years)].sort((a, b) => a - b);
+  }
+
+  const fallbackYear = Number.isFinite(years[0]) ? years[0] : parseInt(allYearCandidates[0], 10);
+  const resolvedFirstYear = Number.isFinite(fallbackYear) ? fallbackYear : new Date().getFullYear();
+  const y0 = resolvedFirstYear - 1;
+  years = years.length ? years : [resolvedFirstYear];
+  let allYears = [y0, ...years];
 
   // Aggregate by calendar year (all dollars)
   const byY = new Map();
@@ -184,6 +321,12 @@ years.forEach(y => {
   taxesLL[y]= t.taxesLL|| 0;  camLL[y]= t.camLL|| 0;  insLL[y]= t.insLL|| 0;  otherLL[y]= t.otherLL|| 0;  mgmtLL[y]= t.mgmtLL|| 0;
 });
 
+const totalTaxesAll = Object.fromEntries(allYears.map(y => [y, (taxesT[y] || 0) + (taxesLL[y] || 0)]));
+const totalCamAll   = Object.fromEntries(allYears.map(y => [y, (camT[y]   || 0) + (camLL[y]   || 0)]));
+const totalInsAll   = Object.fromEntries(allYears.map(y => [y, (insT[y]   || 0) + (insLL[y]   || 0)]));
+const totalMgmtAll  = Object.fromEntries(allYears.map(y => [y, (mgmtT[y]  || 0) + (mgmtLL[y]  || 0)]));
+const totalOtherAll = Object.fromEntries(allYears.map(y => [y, (otherT?.[y] || 0) + (otherLL?.[y] || 0)]));
+
 const recovSubtotal = {}; const llOpexSubtotal = {};
 years.forEach(y => {
   recovSubtotal[y]  = (taxesT[y] + camT[y] + insT[y] + mgmtT[y] + (hasOther ? otherT[y] : 0));
@@ -192,15 +335,40 @@ years.forEach(y => {
 
   // Extras from KPIs
   const kpis    = model.kpis || {};
-  const firstY  = years[0];
-  const y0 = firstY - 1;
-  const allYears = [y0, ...years];
+  // Derive TI total if only PSF given
+  const tiPSF   = model?.tiAllowancePSF || 0;
+  const sizeSF  = model?.spaceSize || 0;
+  const tiCash  = model?.tiAllowanceTotal ?? (tiPSF * sizeSF);
+  const treatmentType = tiTreatment(model);
+  const isAmortizedLike = treatmentType === 'amortized';
+  const perspectivePref = (localStorage.getItem('ner_perspective') || model.perspective || 'landlord');
+
+  const compareSeries = model.compareSeries || {};
+  const landlordFreeSeries = Array.isArray(compareSeries.landlordFreeTI) ? compareSeries.landlordFreeTI : [];
+  const freeTIAllowanceSeries = Array.isArray(compareSeries.freeTIAllowance) ? compareSeries.freeTIAllowance : landlordFreeSeries;
+  let landlordFreeTotals = seriesTotalsByYear(landlordFreeSeries, sched, allYears, y0);
+  let freeTIAllowanceTotals = seriesTotalsByYear(freeTIAllowanceSeries, sched, allYears, y0);
+
+  const financedPrincipal = Math.max(0, +kpis.llFinancedTIY0 || 0);
+  const kpiFreeTIY0 = Math.max(0, +kpis.llFreeTIY0 || 0);
+  const totalAllowance = Math.max(0, tiCash || 0);
+  let freeAllowanceY0 = isAmortizedLike ? Math.max(0, totalAllowance - financedPrincipal) : totalAllowance;
+  if (!freeAllowanceY0 && kpiFreeTIY0) freeAllowanceY0 = kpiFreeTIY0;
+
+  landlordFreeTotals = Object.fromEntries(allYears.map(y => [y, 0]));
+  freeTIAllowanceTotals = Object.fromEntries(allYears.map(y => [y, 0]));
+  landlordFreeTotals[y0] = freeAllowanceY0;
+  freeTIAllowanceTotals[y0] = freeAllowanceY0;
   const tiPrinYr = {}, tiIntYr = {};
-years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
+  years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
 
 (function buildTiAmort() {
+  const zeroSchedule = Object.fromEntries(allYears.map(y => [y, 0]));
+  window.__ner_ti_addl_by_year = zeroSchedule;
+  if (!isAmortizedLike) return;
+
   // Inputs from kpis
-  const P0   = (+kpis.llFinancedTIY0 || 0);      // amount financed by LL (Y0 outlay)
+  const P0   = financedPrincipal;                // amount financed by LL (Y0 outlay)
   const pmt  = (+kpis.tiAmortPmt || 0);          // monthly “Additional TI Rent” charge
   const r_m  = (+kpis.tiRateMonthly || 0);       // monthly rate (decimal)
   const Nmax = (+kpis.termMonths || 0);          // # payments (matches term months)
@@ -212,8 +380,7 @@ years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
 
   // Ensure these maps exist
   years.forEach(y => { tiPrinYr[y] = tiPrinYr[y] || 0; tiIntYr[y] = tiIntYr[y] || 0; });
-  var addlTIYr = {};              // <-- full monthly payment (P+I) by year
-  years.forEach(y => addlTIYr[y] = 0);
+  const addlTIYr = { ...zeroSchedule };              // <-- full monthly payment (P+I) by year
 
   for (const row of sched) {
     if (!row.isTermMonth) continue;
@@ -250,12 +417,12 @@ years.forEach(y => { tiPrinYr[y] = 0; tiIntYr[y] = 0; });
     const llAllowFunded  = +kpis.llAllowanceApplied || 0;
     const tenantImpr     = +kpis.tenantContribution || 0;
 
-    tiFunding[y]    = tiAmortPmt ? (tiAmortPmt * m) : 0;  // 0 for Y0 automatically
+    tiFunding[y]    = (isAmortizedLike && tiAmortPmt) ? (tiAmortPmt * m) : 0;  // 0 for Y0 automatically
   });
 
   // one-time items at Y0
   commYr[y0]       = +kpis.commissionNominal || 0;
-  allowYr[y0] = -((+kpis.llAllowanceOffered || +kpis.llAllowanceApplied) || 0);
+  allowYr[y0] = -freeAllowanceY0;
   tenantImprYr[y0] = -(+kpis.tenantContribution || 0);     // Tenant outflow (used in tenant view)
   commYr[y0]       = +kpis.commissionNominal || 0;
   tenantImprYr[y0] = -(+kpis.tenantContribution || 0);
@@ -275,41 +442,125 @@ const tenantImprDisplay = Object.fromEntries(
 
 // Row helper (supports highlight + parentheses + child grouping + Y0 zero hiding)
 const rowHTML = (label, values, options = {}) => {
-  const { strong=false, highlight=false, paren=false, child=false, group='', hideZeroY0=false } = options;
+  const {
+    strong=false,
+    highlight=false,
+    paren=false,
+    child=false,
+    group='',
+    hideZeroY0=false,
+    key,
+    meta=null,
+    isSubtotal=false,
+    isCore=false
+  } = options;
+
+  const rowMeta = meta || {};
+  const rowKey = key || label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const row = {
+    key: rowKey,
+    label,
+    group,
+    isSubtotal,
+    isCore: isCore || CF_CORE_KEYS.has(rowKey),
+    amountsByYear: values,
+    responsibility: rowMeta.resp || null,
+    meta: rowMeta
+  };
+
+  if (cfShouldHideRow(row, showHidden)) return '';
+  renderedRowKeys.add(rowKey);
+
   const cls = [highlight ? 'em-row' : '', child ? 'child-row' : '', group ? `child-of-${group}` : '']
     .filter(Boolean).join(' ');
-  const lbl = strong ? `<strong>${label}</strong>` : label;
+  let lbl = strong ? `<strong>${label}</strong>` : label;
+  if (rowMeta.resp) {
+    const badge = cfBadgeText(rowMeta.resp, rowMeta.sharePct);
+    if (badge) lbl += ` <span class="pill pill-muted">${badge}</span>`;
+  }
+
+  const unitAttr = rowMeta.unit ? ` data-unit="${rowMeta.unit}"` : '';
+  const noteAttr = rowMeta.calcNote ? ` data-note="${encodeURIComponent(rowMeta.calcNote)}"` : '';
 
   const tds = allYears.map(y => {
-    const raw = values[y] || 0;
-    if (hideZeroY0 && y === y0 && Math.abs(raw) < 0.5) return `<td class="y0-blank">&nbsp;</td>`;
-    return `<td>${paren ? fmtUSD0p(raw) : fmtUSD0(raw)}</td>`;
+    const raw = +values[y] || 0;
+    const isZero = Math.abs(raw) < 1e-8;
+    const display = isZero ? '—' : (paren ? fmtUSD0p(raw) : fmtUSD0(raw));
+    const classes = [];
+    if (isZero) classes.push('muted');
+    if (hideZeroY0 && y === y0 && isZero) classes.push('y0-blank');
+    const classAttr = classes.length ? ` class="${classes.join(' ')}"` : '';
+    return `<td${classAttr}${unitAttr}${noteAttr}>${display}</td>`;
   }).join('');
 
-  return `<tr${cls ? ` class="${cls}"` : ''}><th>${lbl}</th>${tds}</tr>`;
+  const rowAttr = cls ? ` class="${cls}"` : '';
+  return `<tr${rowAttr} data-row-key="${rowKey}"><th>${lbl}</th>${tds}</tr>`;
 };
 
-function expTotal(label, values, key, { strong=false, highlight=false, paren=false, hideZeroY0=false } = {}) {
+function expTotal(label, values, key, { strong=false, highlight=false, paren=false, hideZeroY0=false, meta=null, isCore=false } = {}) {
+  const rowKey = key || label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const rowMeta = meta || {};
+  const row = {
+    key: rowKey,
+    label,
+    isSubtotal: true,
+    isCore: isCore || CF_CORE_KEYS.has(rowKey),
+    amountsByYear: values,
+    responsibility: rowMeta.resp || null,
+    meta: rowMeta
+  };
+
+  if (cfShouldHideRow(row, showHidden)) return '';
+  renderedRowKeys.add(rowKey);
+
   const cls = ['exp-row', highlight ? 'em-row' : ''].filter(Boolean).join(' ');
   const lbl = strong ? `<strong>${label}</strong>` : label;
+  const unitAttr = rowMeta.unit ? ` data-unit="${rowMeta.unit}"` : '';
+  const noteAttr = rowMeta.calcNote ? ` data-note="${encodeURIComponent(rowMeta.calcNote)}"` : '';
 
   const tds = allYears.map(y => {
-    const raw = values[y] || 0;
-    if (hideZeroY0 && y === y0 && Math.abs(raw) < 0.5) return `<td class="y0-blank">&nbsp;</td>`;
-    return `<td>${paren ? fmtUSD0p(raw) : fmtUSD0(raw)}</td>`;
+    const raw = +values[y] || 0;
+    const isZero = Math.abs(raw) < 1e-8;
+    const display = isZero ? '—' : (paren ? fmtUSD0p(raw) : fmtUSD0(raw));
+    const classes = [];
+    if (isZero) classes.push('muted');
+    if (hideZeroY0 && y === y0 && isZero) classes.push('y0-blank');
+    const classAttr = classes.length ? ` class="${classes.join(' ')}"` : '';
+    return `<td${classAttr}${unitAttr}${noteAttr}>${display}</td>`;
   }).join('');
 
-  return `<tr class="${cls}" data-exp="${key}">
-    <th><button class="twisty" data-exp="${key}" aria-expanded="true">▾</button> ${lbl}</th>${tds}
+  if (!key) return `<tr class="${cls}" data-row-key="${rowKey}"><th>${lbl}</th>${tds}</tr>`;
+  const btn = `<button class="twisty subtotal-toggle expanded" data-exp="${key}" aria-expanded="true" aria-label="Collapse ${label} subtotal"><span class="chevron" aria-hidden="true">▾</span></button>`;
+  return `<tr class="${cls}" data-exp="${key}" data-row-key="${rowKey}">
+    <th>${btn} ${lbl}</th>${tds}
   </tr>`;
 }
 
-const perspective = (localStorage.getItem('ner_perspective') || model.perspective || 'landlord');
-  
+const perspective = perspectivePref;
+
+const normalizeRespGlobal = (resp, fallback) => {
+  if (typeof resp === 'string') return resp.toLowerCase();
+  return fallback;
+};
+const normalizeShareGlobal = (val) => {
+  let num = (typeof val === 'string') ? parseFloat(val) : val;
+  if (!Number.isFinite(num)) num = 0.5;
+  if (num > 1) num = num / 100;
+  if (num < 0) num = 0;
+  if (num > 1) num = 1;
+  return num;
+};
+const zeroMapGlobal = (yearsArr) => Object.fromEntries(yearsArr.map(y => [y, 0]));
+const addToMapGlobal = (target, source, yearsArr) => {
+  yearsArr.forEach(y => {
+    target[y] = (target[y] || 0) + (+source[y] || 0);
+  });
+};
+
   // Tenant view CapEx pieces
 const allowYrTenant = {};
 allYears.forEach(y => {
-  allowYrTenant[y] = (y === y0) ? ((+kpis.llAllowanceOffered || +kpis.llAllowanceApplied) || 0) : 0;
+  allowYrTenant[y] = (y === y0) ? freeAllowanceY0 : 0;
 });
 const capexTotalTenant = {};
 allYears.forEach(y => {
@@ -330,11 +581,10 @@ if (perspective === 'tenant') {
 
   // ── Upfront / Possession (Y0 only) ─────────────────────────────────────
   const totalCapex = +kpis.totalCapex || 0;              // Total Improvement Costs
-  const freeTIY0   = +kpis.llFreeTIY0     || 0;          // landlord free TI in Y0
-  const finTIY0    = +kpis.llFinancedTIY0 || 0;          // landlord financed TI in Y0
+  const finTIY0    = financedPrincipal;                  // landlord financed TI in Y0
 
   const buildOutYr = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -totalCapex : 0)])); // negative (tenant outflow)
-  const freeTIYr   = Object.fromEntries(allYears.map(y => [y, (y === y0 ?  freeTIY0  : 0)]));  // positive (LL covers)
+  const freeTIYr   = Object.fromEntries(allYears.map(y => [y, landlordFreeTotals[y] || 0]));  // positive (LL covers)
   const finTIYr    = Object.fromEntries(allYears.map(y => [y, (y === y0 ?  finTIY0   : 0)]));  // positive (LL finances)
 
   const netDue = Object.fromEntries(allYears.map(y => [
@@ -343,11 +593,11 @@ if (perspective === 'tenant') {
 
   const upfrontBlock = [
     rowHTML('Build-Out Costs',              buildOutYr, { paren:true, child:true, group:'upfront' }),
-    rowHTML('Landlord Free TI',             freeTIYr,   {              child:true, group:'upfront' }),
-    rowHTML('Landlord Financed TI',         finTIYr,    {              child:true, group:'upfront' }),
+    rowHTML('Landlord Free TI',             freeTIYr,   { key:'tenant_free_ti', child:true, group:'upfront', isCore:true, meta:{ calcNote: tiCash > 0 ? 'Allowance shown regardless of itemized budget' : undefined } }),
+    rowHTML('Landlord Financed TI',         finTIYr,    { key:'tenant_financed_ti', child:true, group:'upfront' }),
     expTotal('Net Tenant Cash Due at Possession', netDue, 'upfront',
              { strong:true, highlight:true, paren:true })
-  ];
+  ].filter(Boolean);
 
   // ── Recurring Occupancy Cost (Years 1+) ────────────────────────────────
   // Base Rent (use Total Base, already net of free rent)
@@ -363,38 +613,43 @@ if (perspective === 'tenant') {
     tiAmortNeg[y] = (y === y0) ? 0 : -(p + i);
   });
 
-  // Tenant-paid OpEx detail (negatives for tenant)
-  const taxesNeg = negSeries(taxesT);
-  const camNeg   = negSeries(camT);
-  const insNeg   = negSeries(insT);
-  const mgmtNeg  = negSeries(mgmtT);
-  const otherNeg = hasOther ? negSeries(otherT) : null;
+  const zeroMap = () => zeroMapGlobal(allYears);
+  const addToMap = (target, source) => addToMapGlobal(target, source, allYears);
 
-  // OpEx subtotal (tenant)
+  const tenantOpexContribution = zeroMap();
+  const opxDetail = [];
+  const pushTenantOpexRow = ({ key, label, total, respField, shareField }) => {
+    const resp = normalizeRespGlobal(model?.[respField], 'tenant') || 'tenant';
+    const route = cfRoute('tenant', resp);
+    if (route === 'hide') return;
+    const sharePct = normalizeShareGlobal(model?.[shareField]);
+    const share = route === 'split' ? sharePct : 1;
+    const shareAmounts = cfShare(total, share);
+    const negValsTenant = negSeries(shareAmounts);
+    addToMap(tenantOpexContribution, negValsTenant);
+    const meta = { unit: '$/SF/yr', resp, sharePct: route === 'split' ? sharePct : undefined };
+    const html = rowHTML(label, negValsTenant, { key, child:true, group:'opx', paren:true, hideZeroY0:true, meta });
+    if (html) opxDetail.push(html);
+  };
+
+  pushTenantOpexRow({ key: 'taxes', label: 'Taxes', total: totalTaxesAll, respField: 'taxesResp', shareField: 'taxesSharePct' });
+  pushTenantOpexRow({ key: 'cam', label: 'CAM', total: totalCamAll, respField: 'camResp', shareField: 'camSharePct' });
+  pushTenantOpexRow({ key: 'insurance', label: 'Insurance', total: totalInsAll, respField: 'insResp', shareField: 'insSharePct' });
+  pushTenantOpexRow({ key: 'mgmt_fee', label: 'Mgmt Fee', total: totalMgmtAll, respField: 'mgmtFeeResp', shareField: 'mgmtFeeSharePct' });
+  if (hasOther) {
+    pushTenantOpexRow({ key: 'other_opex', label: 'Other OpEx', total: totalOtherAll, respField: 'otherOpExResp', shareField: 'otherOpExSharePct' });
+  }
+
   const opxSubNeg = {};
   allYears.forEach(y => {
-    opxSubNeg[y] =
-      (taxesNeg[y] || 0) +
-      (camNeg[y]   || 0) +
-      (insNeg[y]   || 0) +
-      (mgmtNeg[y]  || 0) +
-      (hasOther ? (otherNeg[y] || 0) : 0);
-    // Ensure Y0 subtotal is zero (no recurring costs in possession year)
+    opxSubNeg[y] = tenantOpexContribution[y] || 0;
     if (y === y0) opxSubNeg[y] = 0;
   });
 
-  const opxDetail = [
-    rowHTML('Taxes',     taxesNeg, { child:true, group:'opx', paren:true, hideZeroY0:true }),
-    rowHTML('CAM',       camNeg,   { child:true, group:'opx', paren:true, hideZeroY0:true }),
-    rowHTML('Insurance', insNeg,   { child:true, group:'opx', paren:true, hideZeroY0:true }),
-    rowHTML('Mgmt Fee',  mgmtNeg,  { child:true, group:'opx', paren:true, hideZeroY0:true }),
-    ...(hasOther ? [ rowHTML('Other OpEx', otherNeg, { child:true, group:'opx', paren:true, hideZeroY0:true }) ] : [])
-  ];
-
   const opxBlock = [
     ...opxDetail,
-    expTotal('NNN / OpEx', opxSubNeg, 'opx', { strong:true, highlight:true, paren:true, hideZeroY0:true })
-  ];
+    expTotal('NNN / OpEx', opxSubNeg, 'opx', { strong:true, highlight:true, paren:true, hideZeroY0:true, isCore:true })
+  ].filter(Boolean);
 
   // Total Occupancy Cost (Years 1+): Base + Amortized TI + OpEx
   const occCost = {};
@@ -416,14 +671,28 @@ if (perspective === 'tenant') {
     ...upfrontBlock,
 
     // Recurring
-    rowHTML('Base Rent',              baseNeg,    { paren:true, hideZeroY0:true }),
-    rowHTML('Amortized TI Payment',   tiAmortNeg, { paren:true, hideZeroY0:true }),
+    rowHTML('Base Rent',              baseNeg,    { key:'base_rent', paren:true, hideZeroY0:true, isCore:true }),
+    rowHTML('Amortized TI Payment',   tiAmortNeg, { key:'amortized_ti_payment', paren:true, hideZeroY0:true }),
     ...opxBlock,
-    expTotal('Total Occupancy Cost',  occCost,    'occ', { strong:true, highlight:true, paren:true }),
+    expTotal('Total Occupancy Cost',  occCost,    null, { strong:true, highlight:true, paren:true, isCore:true }),
 
     // Cumulative
-    rowHTML('Cumulative Occupancy Cost', cumOcc,  { strong:true, highlight:true, paren:true })
-  ];
+    rowHTML('Cumulative Occupancy Cost', cumOcc,  { key:'cumulative_cash_flow', strong:true, highlight:true, paren:true, isCore:true })
+  ].filter(Boolean);
+
+  if ((model.tiAllowanceTotal ?? 0) > 0 || (model.tiAllowancePSF ?? 0) > 0) {
+    console.assert(renderedRowKeys.has('tenant_free_ti') || renderedRowKeys.has('free_ti_allowance'),
+      'TI row should be visible when TI>0');
+  }
+  if (model.taxesResp === 'tenant') {
+    console.assert(renderedRowKeys.has('taxes'), 'Taxes should appear in tenant view when tenant-paid');
+  }
+  if (model.taxesResp === 'landlord') {
+    console.assert(!renderedRowKeys.has('taxes'), 'Taxes should be hidden in tenant view when LL-paid');
+  }
+  if (model.taxesResp === 'split') {
+    console.assert(renderedRowKeys.has('taxes'), 'Taxes should appear in both views when split');
+  }
 
   return `<table class="cf-mini"><thead><tr>${ths}</tr></thead><tbody>${lines.join('')}</tbody></table>`;
 }
@@ -462,10 +731,9 @@ allYears.forEach(y => {
 });
 
 // --- Initial TI Outlay (Y0 only): split Free vs Financed using kpis
-const freeTIY0     = (+kpis.llFreeTIY0     || 0);
-const financedTIY0 = (+kpis.llFinancedTIY0 || 0);
+const financedTIY0 = financedPrincipal;
 
-const initFree = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -freeTIY0     : 0)]));
+const initFree = Object.fromEntries(allYears.map(y => [y, -(freeTIAllowanceTotals[y] || 0)]));
 const initFin  = Object.fromEntries(allYears.map(y => [y, (y === y0 ? -financedTIY0 : 0)]));
 const initTI   = Object.fromEntries(allYears.map(y => [y, initFree[y] + initFin[y]]));
 
@@ -486,55 +754,77 @@ allYears.forEach(y => {
 // ------------------- Detail groups --------------------
 
 // Recoveries (tenant-paid detail)
-const recovDetail = [
-  rowHTML('Taxes',     taxesT, { child:true, group:'rec', hideZeroY0:true }),
-  rowHTML('CAM',       camT,   { child:true, group:'rec', hideZeroY0:true }),
-  rowHTML('Insurance', insT,   { child:true, group:'rec', hideZeroY0:true }),
-  rowHTML('Mgmt Fee',  mgmtT,  { child:true, group:'rec', hideZeroY0:true }),
-  ...(hasOther ? [ rowHTML('Other OpEx', otherT, { child:true, group:'rec', hideZeroY0:true }) ] : [] )
-];
+const recovDetail = [];
+const pushRecoveryRow = ({ key, label, values, respField, shareField }) => {
+  const resp = normalizeRespGlobal(model?.[respField], 'tenant') || 'tenant';
+  const route = cfRoute('landlord', resp);
+  if (route === 'hide' || resp === 'landlord') return;
+  const sharePct = normalizeShareGlobal(model?.[shareField]);
+  const meta = { unit: '$/SF/yr', resp, sharePct: route === 'split' ? sharePct : undefined };
+  const html = rowHTML(label, values, { key, child:true, group:'rec', hideZeroY0:true, meta });
+  if (html) recovDetail.push(html);
+};
+
+pushRecoveryRow({ key: 'taxes', label: 'Taxes', values: taxesT, respField: 'taxesResp', shareField: 'taxesSharePct' });
+pushRecoveryRow({ key: 'cam', label: 'CAM', values: camT, respField: 'camResp', shareField: 'camSharePct' });
+pushRecoveryRow({ key: 'insurance', label: 'Insurance', values: insT, respField: 'insResp', shareField: 'insSharePct' });
+pushRecoveryRow({ key: 'mgmt_fee', label: 'Mgmt Fee', values: mgmtT, respField: 'mgmtFeeResp', shareField: 'mgmtFeeSharePct' });
+if (hasOther) {
+  pushRecoveryRow({ key: 'other_opex', label: 'Other OpEx', values: otherT, respField: 'otherOpExResp', shareField: 'otherOpExSharePct' });
+}
 
 // LL Operating Cost (detail; shown as negatives)
-const llOpxDetail = [
-  rowHTML('Taxes',     negVals(taxesLL), { child:true, group:'llopx', paren:true, hideZeroY0:true }),
-  rowHTML('CAM',       negVals(camLL),   { child:true, group:'llopx', paren:true, hideZeroY0:true }),
-  rowHTML('Insurance', negVals(insLL),   { child:true, group:'llopx', paren:true, hideZeroY0:true }),
-  rowHTML('Mgmt Fee',  negVals(mgmtLL),  { child:true, group:'llopx', paren:true, hideZeroY0:true }),
-  ...(hasOther ? [ rowHTML('Other OpEx', negVals(otherLL), { child:true, group:'llopx', paren:true, hideZeroY0:true }) ] : [] ),
-];
+const llOpxDetail = [];
+const pushLLOpexRow = ({ key, label, values, respField, shareField }) => {
+  const resp = normalizeRespGlobal(model?.[respField], 'tenant') || 'tenant';
+  const route = cfRoute('landlord', resp);
+  if (route === 'hide') return;
+  const sharePct = normalizeShareGlobal(model?.[shareField]);
+  const meta = { unit: '$/SF/yr', resp, sharePct: route === 'split' ? (1 - sharePct) : undefined };
+  const html = rowHTML(label, negVals(values), { key, child:true, group:'llopx', paren:true, hideZeroY0:true, meta });
+  if (html) llOpxDetail.push(html);
+};
+
+pushLLOpexRow({ key: 'taxes', label: 'Taxes', values: taxesLL, respField: 'taxesResp', shareField: 'taxesSharePct' });
+pushLLOpexRow({ key: 'cam', label: 'CAM', values: camLL, respField: 'camResp', shareField: 'camSharePct' });
+pushLLOpexRow({ key: 'insurance', label: 'Insurance', values: insLL, respField: 'insResp', shareField: 'insSharePct' });
+pushLLOpexRow({ key: 'mgmt_fee', label: 'Mgmt Fee', values: mgmtLL, respField: 'mgmtFeeResp', shareField: 'mgmtFeeSharePct' });
+if (hasOther) {
+  pushLLOpexRow({ key: 'other_opex', label: 'Other OpEx', values: otherLL, respField: 'otherOpExResp', shareField: 'otherOpExSharePct' });
+}
 
 // ------------------- Rows (order per spec) --------------------
 const lines = [
   // Base rent stack
   rowHTML('Base Rent',
     Object.fromEntries(allYears.map(y => [y, (byY.get(y)?.basePre) || 0])),
-    { hideZeroY0:true }
+    { key:'base_rent', hideZeroY0:true, isCore:true }
   ),
   rowHTML('Free Rent',
     Object.fromEntries(allYears.map(y => [y, -((byY.get(y)?.freeBase) || 0)])),
     { paren:true, hideZeroY0:true }
   ),
-  rowHTML('Total Base Rent', totalBaseYr, { strong:true, highlight:true, hideZeroY0:true }),
+  rowHTML('Total Base Rent', totalBaseYr, { key:'total_base', strong:true, highlight:true, hideZeroY0:true, isCore:true }),
 
   // Additional TI Rent (top-line)
-  rowHTML('Additional TI Rent', addlTI, { hideZeroY0:true }),
+  rowHTML('Additional TI Rent', addlTI, { key:'addl_ti_rent', hideZeroY0:true }),
 
   // Recoveries (detail + subtotal)
   ...recovDetail,
   expTotal('Total Recoveries', recovSubtotal, 'rec', { strong:true, highlight:true, hideZeroY0:true }),
 
   // Total rent + recoveries
-  rowHTML('Total Rent & Recoveries', totalRentRec, { strong:true, highlight:true, hideZeroY0:true }),
+  rowHTML('Total Rent & Recoveries', totalRentRec, { key:'rent_recoveries_total', strong:true, highlight:true, hideZeroY0:true, isCore:true }),
 
   // Unrecoverable LL Opex and NOI
   ...llOpxDetail,
   expTotal('Landlord Operating Cost (Unrecoverable)', llOpxNeg, 'llopx',
     { strong:true, highlight:true, paren:true, hideZeroY0:true }),
-  rowHTML('Net Operating Income (NOI)', noi, { strong:true, highlight:true, hideZeroY0:true }),
+  rowHTML('Net Operating Income (NOI)', noi, { key:'noi', strong:true, highlight:true, hideZeroY0:true, isCore:true }),
 
   // Initial TI Outlay block (Y0 only)
-  rowHTML('Free TI / Improvement Allowance', initFree, { paren:true }),
-  rowHTML('Financed TI Funded by Landlord',  initFin,  { paren:true }),
+  rowHTML('Free TI / Improvement Allowance', initFree, { key:'free_ti_allowance', paren:true, isCore:true, meta:{ calcNote: tiCash > 0 ? 'Allowance shown regardless of itemized budget' : undefined } }),
+  rowHTML('Financed TI Funded by Landlord',  initFin,  { key:'ll_financed_ti', paren:true }),
   rowHTML('Total Initial TI Outlay',         initTI,   { paren:true, strong:true, highlight:true }),
 
   // Optional: show commissions (kept separate for transparency)
@@ -545,9 +835,23 @@ const lines = [
       : [] ),
 
   // Cash flows
-  rowHTML('Net Cash Flow (before debt)', cash, { strong:true, highlight:true, paren:true }),
-  rowHTML('Cumulative Cash Flow',        cum,  { strong:true, highlight:true, paren:true })
-];
+    rowHTML('Net Cash Flow (before debt)', cash, { key:'net_cash_flow', strong:true, highlight:true, paren:true, isCore:true }),
+  rowHTML('Cumulative Cash Flow',        cum,  { key:'cumulative_cash_flow', strong:true, highlight:true, paren:true, isCore:true })
+].filter(Boolean);
+
+if ((model.tiAllowanceTotal ?? 0) > 0 || (model.tiAllowancePSF ?? 0) > 0) {
+  console.assert(renderedRowKeys.has('free_ti_allowance') || renderedRowKeys.has('tenant_free_ti'),
+    'TI row should be visible when TI>0');
+}
+if (model.taxesResp === 'tenant') {
+  console.assert(!renderedRowKeys.has('taxes'), 'Taxes should be hidden in landlord view when tenant-paid');
+}
+if (model.taxesResp === 'landlord') {
+  console.assert(renderedRowKeys.has('taxes'), 'Taxes should appear in landlord view when LL-paid');
+}
+if (model.taxesResp === 'split') {
+  console.assert(renderedRowKeys.has('taxes'), 'Taxes should appear in both views when split');
+}
 
 return `<table class="cf-mini"><thead><tr>${ths}</tr></thead><tbody>${lines.join('')}</tbody></table>`;
 
@@ -679,15 +983,22 @@ function renderCompareGrid() {
   }
   host.innerHTML = html;
 
+  host.querySelectorAll('td[data-unit], td[data-note]').forEach(td => {
+    cfSetTooltip(td, td.dataset.unit, td.dataset.note);
+  });
+
   // Wire expand/collapse (the subtotal row controls its child group)
   host.querySelectorAll('.scenario-right .twisty').forEach(btn => {
+    const key = btn.dataset.exp;
+    const initiallyExpanded = btn.getAttribute('aria-expanded') !== 'false';
+    btn.classList.toggle('expanded', initiallyExpanded);
     btn.addEventListener('click', () => {
-      const key = btn.dataset.exp;
-      const open = btn.getAttribute('aria-expanded') !== 'false';
-      btn.setAttribute('aria-expanded', String(!open));
-      btn.textContent = open ? '▸' : '▾';
+      const isExpanded = btn.getAttribute('aria-expanded') !== 'false';
+      const next = !isExpanded;
+      btn.setAttribute('aria-expanded', String(next));
+      btn.classList.toggle('expanded', next);
       host.querySelectorAll(`.scenario-right tr.child-of-${key}`).forEach(tr => {
-        tr.style.display = open ? 'none' : '';
+        tr.style.display = next ? '' : 'none';
       });
     });
   });
@@ -704,6 +1015,11 @@ function bootScenarios() {
   window.addEventListener('ner:calculated', (ev) => {
     window.__ner_last = ev.detail?.model || window.__ner_last;
   });
+
+  const showHiddenToggle = document.getElementById('showHiddenRows');
+  if (showHiddenToggle) {
+    showHiddenToggle.addEventListener('change', renderCompareGrid);
+  }
 
   // Expand all before printing / exporting PDF to ensure details show
   window.addEventListener('beforeprint', () => {

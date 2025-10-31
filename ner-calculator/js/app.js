@@ -41,6 +41,22 @@
     }
   
     function fmtPSF(v) { return (isFinite(v) ? `$${v.toFixed(2)}/SF` : '$0.00/SF'); }
+
+    function computeLandlordFreeTI({ tiAmount = 0, tiUnit = 'per_sf', areaSF = 0, treatment = 'cash' } = {}) {
+      const amount = Number(tiAmount) || 0;
+      const unit = (tiUnit || '').toString().toLowerCase();
+      const area = Number(areaSF) || 0;
+      const treat = (treatment || '').toString().toLowerCase();
+
+      const isPerSF = unit === 'per_sf'
+        || unit === 'psf'
+        || unit.includes('/sf')
+        || unit.includes('per sf')
+        || unit.includes('$/sf');
+
+      const total = isPerSF ? (amount * area) : amount;
+      return treat === 'cash' ? total : 0;
+    }
   
     // LL Gross excludes pass-through recoveries across all service types.
     function includeOpExInGross(perspective, serviceType) {
@@ -270,6 +286,57 @@ window.addEventListener('load', initMap);
       const [y, m, day] = val.split("-").map(Number);
       return new Date(y, (m || 1) - 1, day || 1);
     }
+
+    function addMonthsUTC(date, months) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return new Date(NaN);
+      const m = Number(months) || 0;
+      const copy = new Date(date.getFullYear(), date.getMonth(), 1);
+      copy.setMonth(copy.getMonth() + m);
+      return copy;
+    }
+
+    function getLeaseTimingSummary(model = {}) {
+      const termMonths = Number(model?.termMonths ?? model?.term ?? 0) || 0;
+
+      const freeInfo = model?.freeRent || {};
+      const baseFree = Number(freeInfo?.months ?? model?.freeMonths ?? 0) || 0;
+      const patternFree = Number(freeInfo?.patternMonths ?? 0) || 0;
+      const freeMonths = baseFree + patternFree;
+
+      const placementRaw = (freeInfo?.freePlacement ?? freeInfo?.placement ?? model?.freePlacement ?? '')
+        .toString()
+        .toLowerCase();
+      const freePlacement = placementRaw === 'outside' ? 'outside' : 'inside';
+
+      const startCandidates = [];
+      if (model?.commencementDate) startCandidates.push(model.commencementDate);
+      if (model?.leaseStartISO) startCandidates.push(`${model.leaseStartISO}-01`);
+      if (model?.leaseStart) startCandidates.push(model.leaseStart);
+
+      let startDate = new Date(NaN);
+      for (const cand of startCandidates) {
+        if (!cand) continue;
+        const parsed = cand instanceof Date ? new Date(cand.getTime()) : new Date(cand);
+        if (!Number.isNaN(parsed.getTime())) {
+          startDate = new Date(parsed.getFullYear(), parsed.getMonth(), 1);
+          break;
+        }
+      }
+
+      const endDate = (!Number.isNaN(startDate.getTime()) && termMonths > 0)
+        ? addMonthsUTC(startDate, Math.max(termMonths - 1, 0))
+        : new Date(NaN);
+
+      const chips = [
+        `Term: ${termMonths} ${termMonths === 1 ? 'month' : 'months'}`,
+        `${freeMonths} ${freeMonths === 1 ? 'month' : 'months'} free`,
+        `${freePlacement} the term`
+      ];
+
+      return { startDate, endDate, termMonths, freeMonths, freePlacement, chips };
+    }
+
+    window.getLeaseTimingSummary = getLeaseTimingSummary;
     // Recalculate when commission/discount inputs change
     ['brokerCommission', 'discount'].forEach(id => {
       const el = document.getElementById(id);
@@ -1545,8 +1612,14 @@ window.addEventListener('load', initMap);
   
         const llAllowanceApplied = Math.min(llAllowTotal, totalCapex);
         const tenantContribution = Math.max(0, totalCapex - llAllowanceApplied);
-  
+
         const llAllowTreatment = $('#llAllowTreatment')?.value || 'cash';  // 'cash' | 'amort'
+        const landlordFreeTICash = computeLandlordFreeTI({
+          tiAmount: llAllowVal,
+          tiUnit: llAllowUnit,
+          areaSF: area,
+          treatment: llAllowTreatment
+        });
         const llAllowApr = rawNumberFromInput($('#llAllowApr')) / 100;
   
         // For table display ($/SF)
@@ -1703,7 +1776,8 @@ window.addEventListener('load', initMap);
         }
         const customSet = parseCustomMonths(abateCustomSpec, scheduleMonths);
         if (customSet.size) scheduleMonths = Math.max(scheduleMonths, Math.max(...customSet));
-  
+        const customPatternMonths = abateCustomSpec ? customSet.size : 0;
+
         const isMonthAbated = (m) => {
           if (customSet.size) return customSet.has(m);
           if (!freeMonths) return false;
@@ -2147,26 +2221,45 @@ window.addEventListener('load', initMap);
         }
   
         hasOtherOpEx = totalOtherAnnualPSF > 0;
+
+        // -----------------------------------------------------------------------
+        // Cash-flow comparison helpers (Landlord Free TI / Allowance lines)
+        // -----------------------------------------------------------------------
+        const landlordFreeTI = Array(schedule.length + 1).fill(0);
+        const freeTIAllowance = Array(schedule.length + 1).fill(0);
+
+        landlordFreeTI[0] = landlordFreeTICash;
+        freeTIAllowance[0] = landlordFreeTICash;
   
         // -----------------------------------------------------------------------
         // KPIs (PV & simple)
         // -----------------------------------------------------------------------
   
         function setTermChip(data) {
-          const chip = document.getElementById('termChip');
-          if (!chip) return;
-      
-          // Accept data.term OR data.termMonths; fallback to counting schedule months
-          const termMonths =
-            Number(data?.term ?? data?.termMonths ?? 0) ||
-            (Array.isArray(data?.schedule)
-              ? data.schedule.filter(m => m.isTermMonth ?? true).length
-              : 0);
-      
-          chip.textContent = `Term: ${termMonths} ${termMonths === 1 ? 'Month' : 'Months'}`;
-      
-          // (Optional) hide if 0 or invalid
-          chip.style.display = termMonths > 0 ? '' : 'none';
+          const container = document.getElementById('termChip');
+          if (!container) return;
+
+          const summary = (data && data.startDate instanceof Date && Array.isArray(data.chips))
+            ? data
+            : (typeof getLeaseTimingSummary === 'function' ? getLeaseTimingSummary(data || {}) : null);
+
+          const chips = summary?.chips?.filter(Boolean) || [];
+
+          container.innerHTML = '';
+
+          if (!chips.length) {
+            container.style.display = 'none';
+            return;
+          }
+
+          for (const text of chips) {
+            const pill = document.createElement('span');
+            pill.className = 'chip';
+            pill.textContent = text;
+            container.appendChild(pill);
+          }
+
+          container.style.display = '';
         }
        
         const yearsTerm = term / 12;
@@ -2284,18 +2377,6 @@ window.addEventListener('load', initMap);
         }
   
         // Write KPI cards (if present)
-        if (leaseStartEl) {
-          leaseStartEl.textContent = startDate.toLocaleString(undefined, { month: 'short', year: 'numeric' });
-        }
-  
-        setTermChip({ term });
-  
-        // Use scheduleMonths so “outside” free months extend the displayed end date
-        if (leaseEndEl) {
-          const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + scheduleMonths - 1, 1);
-          leaseEndEl.textContent = endDate.toLocaleString(undefined, { month: 'short', year: 'numeric' });
-        }
-  
         if (nerPVEl) nerPVEl.textContent = formatUSD(nerPV);
         if (nerSimpleEl) nerSimpleEl.textContent = formatUSD(nerSimple);
         if (avgNetMonthlyEl) avgNetMonthlyEl.textContent = formatUSD(avgNetMonthly);
@@ -2319,10 +2400,17 @@ window.addEventListener('load', initMap);
         const insModeForModel = insMode;
         const mgmtModeForModel = mgmtMode;
   
+        const commencementISO = startDate
+          ? `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`
+          : null;
+        const startYearValue = Number.isFinite(startDate.getFullYear()) ? startDate.getFullYear() : null;
+
         const model = {
           suite,
           area,
           termMonths: term,
+          startYear: startYearValue,
+          commencementDate: commencementISO,
           leaseStartISO: `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}`,
           leaseEndISO: (() => {
             const d = new Date(startDate.getFullYear(), startDate.getMonth() + scheduleMonths - 1, 1);
@@ -2335,7 +2423,18 @@ window.addEventListener('load', initMap);
           totalPaidNet,
           totalPaidGross,
           schedule,
-  
+          compareSeries: {
+            landlordFreeTI,
+            freeTIAllowance
+          },
+
+          freeRent: {
+            months: freeMonths,
+            patternMonths: customPatternMonths,
+            placement: freePlacement,
+            timing: freeTiming
+          },
+
           serviceType: type,
           customExpenses: extraOpExRows.map(row => ({ ...row })),
           coreOpExModes: {
@@ -2363,7 +2462,27 @@ window.addEventListener('load', initMap);
         model.perspective = (localStorage.getItem('ner_perspective') || 'landlord');
         model.hasOtherOpEx = hasOtherOpEx;
         model.grossSummaries = grossSummaries;
-  
+
+        const leaseTiming = typeof getLeaseTimingSummary === 'function'
+          ? getLeaseTimingSummary(model)
+          : null;
+        const formatLeaseLabel = (date) => (date instanceof Date && !Number.isNaN(date.getTime()))
+          ? date.toLocaleString(undefined, { month: 'short', year: 'numeric' })
+          : '—';
+        const startLabel = leaseTiming
+          ? formatLeaseLabel(leaseTiming.startDate)
+          : startDate.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+        const endFallback = new Date(startDate.getFullYear(), startDate.getMonth() + scheduleMonths - 1, 1);
+        const endLabel = leaseTiming
+          ? formatLeaseLabel(leaseTiming.endDate)
+          : endFallback.toLocaleString(undefined, { month: 'short', year: 'numeric' });
+        if (leaseStartEl) {
+          leaseStartEl.textContent = startLabel;
+        }
+        if (leaseEndEl) {
+          leaseEndEl.textContent = endLabel;
+        }
+
         // attach the computed extras
         model.kpis = {
           freeGrossNominal, freeGrossPV, pctAbated,
@@ -2380,7 +2499,7 @@ window.addEventListener('load', initMap);
           totalIncentivePV,   // Free Rent (PV) + TI Offer (PV)
           llAllowanceOffered: llAllowTotal,
           llAllowTreatment: llAllowTreatment,                           // 'cash' | 'amort'
-          llFreeTIY0:      (llAllowTreatment === 'cash'  ? llAllowanceApplied : 0),
+          llFreeTIY0:      landlordFreeTICash,
           llFinancedTIY0:  (llAllowTreatment === 'amort' ? llAllowanceApplied : 0),
           totalCapex,              // NEW: Total Improvement Costs (for Build-Out Costs row)
   
@@ -2391,12 +2510,12 @@ window.addEventListener('load', initMap);
           termMonths: term                                // mirror so scenarios can read from kpis
         };
   
-    
+
         // update the new KPI cards (function you already defined above)
         updateExtraKpis(model);
-  
+
         // after building model
-        setTermChip(model); // works because the function checks data.termMonths
+        setTermChip(leaseTiming || model);
   
         // Store globally for charts/scenarios
         window.__ner_last = model;

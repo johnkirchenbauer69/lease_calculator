@@ -2420,6 +2420,16 @@ body {
     text-align: right;
 }
 
+.subtotal-toggle .chevron {
+    display: inline-block;
+    transition: transform .18s ease;
+    transform: rotate(0deg);
+}
+
+.subtotal-toggle.expanded .chevron {
+    transform: rotate(180deg);
+}
+
 .cf-mini tfoot td {
     padding: 10px 12px;
     border-top: 1px solid var(--border-1);
@@ -3300,19 +3310,17 @@ body {
     position: relative;
 }
 
-/* ensures the chip can anchor inside */
-.kpi .chip.term-chip {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    padding: 2px 8px;
-    border-radius: 999px;
+.term-chip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.term-chip .chip {
     font-size: 12px;
     line-height: 1.2;
-    background: var(--panel-3, #2b2b2b);
-    border: 1px solid var(--stroke, #3a3a3a);
-    color: var(--text, #eaeaea);
-    opacity: .95;
+    padding: 2px 8px;
 }
 
 th .hdr-note {
@@ -3392,4 +3400,32 @@ th .hdr-note {
     height: 42px;
     display: block;
     filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .35));
+}
+
+.show-hidden-toggle {
+  display: inline-flex;
+  gap: .5rem;
+  align-items: center;
+  margin-left: .75rem;
+  opacity: .85;
+}
+
+.pill {
+  font-size: .7rem;
+  padding: .15rem .4rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.pill-muted {
+  opacity: .9;
+}
+
+td[data-unit] {
+  position: relative;
+}
+
+td[data-unit][title] {
+  cursor: help;
 }
