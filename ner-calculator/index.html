@@ -1189,9 +1189,9 @@
   <!-- One segmented control for all three views -->
 <!-- View toggle -->
 <div id="resultsViewToggle" class="view-pills">
-  <button class="btn-pill active" data-view="schedule">Rent Schedule</button>
-  <button class="btn-pill" data-view="compare">Lease Comparison</button>
-  <button class="btn-pill" data-view="charts">Charts</button>
+  <button id="tabRentSchedule" class="btn-pill active" data-view="schedule">Rent Schedule</button>
+  <button id="tabLeaseComparison" class="btn-pill" data-view="compare">Lease Comparison</button>
+  <button id="tabCharts" class="btn-pill" data-view="charts">Charts</button>
 
 </div>
 
@@ -1334,10 +1334,6 @@
 
   <section id="cashFlowComparison" class="toggle-panel hidden">
     <!-- existing Cash Flow Comparison markup lives here -->
-    <label class="show-hidden-toggle">
-      <input id="showHiddenRows" type="checkbox" />
-      Show hidden rows
-    </label>
 
     <!-- Annual rent cash-flow compare (renders when ≥1 scenarios are pinned) -->
     <div id="cashflowCompare" class="cf-compare" style="margin-top:18px;"></div>

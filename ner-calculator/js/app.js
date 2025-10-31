@@ -1356,25 +1356,35 @@ window.addEventListener('load', initMap);
     viewToggles.forEach(b => b.classList.toggle("active", b.dataset.view === activeView));
   
     // KPI’s + Rent Schedule | KPI’s + Charts | Lease Comparison
-    const resultsViewButtons = $$('#resultsViewToggle [data-view]');
+    const resultsViewToggle = document.getElementById('resultsViewToggle');
     const scheduleWrap = document.getElementById('rent-schedule');
     const chartsWrap = document.getElementById('analysis-charts');
     const compareWrap = document.getElementById('compareSection');
-  
+
     function setResultsView(mode) {
       scheduleWrap?.classList.toggle('hidden', mode !== 'schedule');
       chartsWrap?.classList.toggle('hidden', mode !== 'charts');
       compareWrap?.classList.toggle('hidden', mode !== 'compare');
-      resultsViewButtons.forEach(b => b.classList.toggle('active', b.dataset.view === mode));
+      const buttons = resultsViewToggle ? Array.from(resultsViewToggle.querySelectorAll('[data-view]')) : [];
+      buttons.forEach(b => b.classList.toggle('active', b.dataset.view === mode));
+      const kpiResults = document.getElementById('kpiResults');
+      kpiResults?.classList.toggle('hidden', mode === 'compare');
       try { localStorage.setItem('ner_view_mode', mode); } catch { }
       if (mode === 'charts' && window.charts && window.__ner_last) window.charts.update(window.__ner_last);
       if (mode === 'compare' && typeof window.renderCompareGrid === 'function') {
         window.renderCompareGrid();
       }
     }
-  
-    resultsViewButtons.forEach(btn => btn.addEventListener('click', () => setResultsView(btn.dataset.view)));
-    setResultsView(localStorage.getItem('ner_view_mode') || ($('#resultsViewToggle [data-view].active')?.dataset.view) || 'schedule');
+
+    if (resultsViewToggle) {
+      resultsViewToggle.addEventListener('click', (evt) => {
+        const btn = evt.target.closest('[data-view]');
+        if (!btn || !resultsViewToggle.contains(btn)) return;
+        setResultsView(btn.dataset.view);
+      });
+    }
+
+    setResultsView(localStorage.getItem('ner_view_mode') || (resultsViewToggle?.querySelector('[data-view].active')?.dataset.view) || 'schedule');
   
     // Landlord / Tenant perspective toggle
     $$('#perspectiveToggles .perspective-toggle').forEach(btn => {
@@ -3466,20 +3476,27 @@ window.addEventListener('load', initMap);
     window.summarizeGrossByPerspective = summarizeGrossByPerspective;
     window.renderScheduleTable = renderScheduleTable;
 
-    (function initComparisonToggle() {
-      if (window.__comparisonToggleInit) return;
-      window.__comparisonToggleInit = true;
+    (function initLeaseComparisonVisibility() {
+      if (window.__leaseComparisonVisibilityInit) return;
+      window.__leaseComparisonVisibilityInit = true;
 
       const kpi = document.getElementById('kpiResults');
-      let btnSum = document.getElementById('btnComparisonSummary');
-      let btnCF = document.getElementById('btnCashFlowComparison');
+
+      const tabRent = document.getElementById('tabRentSchedule');
+      const tabLease = document.getElementById('tabLeaseComparison');
+      const tabCharts = document.getElementById('tabCharts');
+
+      const btnSum = document.getElementById('btnComparisonSummary');
+      const btnCF = document.getElementById('btnCashFlowComparison');
+
       const panelSum = document.getElementById('comparisonSummary');
       const panelCF = document.getElementById('cashFlowComparison');
+
       const hiddenWrap = document.getElementById('toggleHiddenRowsWrap');
       const hiddenInput = document.getElementById('toggleHiddenRows');
 
-      if (!kpi || !btnSum || !btnCF || !panelSum || !panelCF) {
-        console.warn('[Toggle] Missing required elements (kpiResults/buttons/panels).');
+      if (!kpi || !tabRent || !tabLease || !tabCharts || !btnSum || !btnCF || !panelSum || !panelCF) {
+        console.warn('[LeaseComparison] Missing one or more required elements.');
         return;
       }
 
@@ -3489,35 +3506,52 @@ window.addEventListener('load', initMap);
         }
       }
 
-      function showPanel(which) {
+      function setKpiVisibilityForTab(activeTabId) {
+        const isLeaseComparison = activeTabId === 'tabLeaseComparison';
+        kpi.classList.toggle('hidden', isLeaseComparison);
+      }
+
+      function showInnerPanel(which) {
         const isSummary = which === 'summary';
 
         panelSum.classList.toggle('hidden', !isSummary);
         panelCF.classList.toggle('hidden', isSummary);
 
-        btnSum.classList.toggle('active', isSummary);
-        btnCF.classList.toggle('active', !isSummary);
+        const currentBtnSum = document.getElementById('btnComparisonSummary');
+        const currentBtnCF = document.getElementById('btnCashFlowComparison');
 
-        btnSum.setAttribute('aria-selected', String(isSummary));
-        btnCF.setAttribute('aria-selected', String(!isSummary));
+        currentBtnSum?.classList.toggle('active', isSummary);
+        currentBtnCF?.classList.toggle('active', !isSummary);
 
-        if (hiddenWrap) {
-          hiddenWrap.classList.toggle('hidden', !isSummary);
-        }
+        currentBtnSum?.setAttribute('aria-selected', String(isSummary));
+        currentBtnCF?.setAttribute('aria-selected', String(!isSummary));
+
+        hiddenWrap?.classList.toggle('hidden', !isSummary);
 
         if (isSummary) {
           renderSummaryIfNeeded();
         }
       }
 
-      btnSum.replaceWith(btnSum.cloneNode(true));
-      btnCF.replaceWith(btnCF.cloneNode(true));
+      function replaceWithClone(el) {
+        const clone = el.cloneNode(true);
+        el.parentNode.replaceChild(clone, el);
+        return clone;
+      }
 
-      btnSum = document.getElementById('btnComparisonSummary');
-      btnCF = document.getElementById('btnCashFlowComparison');
+      const cleanTabRent = replaceWithClone(tabRent);
+      const cleanTabLease = replaceWithClone(tabLease);
+      const cleanTabCharts = replaceWithClone(tabCharts);
 
-      btnSum.addEventListener('click', () => showPanel('summary'));
-      btnCF.addEventListener('click', () => showPanel('cashflow'));
+      const cleanBtnSum = replaceWithClone(btnSum);
+      const cleanBtnCF = replaceWithClone(btnCF);
+
+      cleanTabRent.addEventListener('click', () => setKpiVisibilityForTab('tabRentSchedule'));
+      cleanTabLease.addEventListener('click', () => setKpiVisibilityForTab('tabLeaseComparison'));
+      cleanTabCharts.addEventListener('click', () => setKpiVisibilityForTab('tabCharts'));
+
+      cleanBtnSum.addEventListener('click', () => showInnerPanel('summary'));
+      cleanBtnCF.addEventListener('click', () => showInnerPanel('cashflow'));
 
       if (hiddenInput) {
         hiddenInput.addEventListener('change', () => {
@@ -3527,6 +3561,15 @@ window.addEventListener('load', initMap);
         });
       }
 
-      showPanel('summary');
+      window.__setKpiVisibilityForTab = setKpiVisibilityForTab;
+
+      const activeTab =
+        (document.querySelector('#tabLeaseComparison.active') && 'tabLeaseComparison') ||
+        (document.querySelector('#tabRentSchedule.active') && 'tabRentSchedule') ||
+        (document.querySelector('#tabCharts.active') && 'tabCharts') ||
+        'tabRentSchedule';
+
+      setKpiVisibilityForTab(activeTab);
+      showInnerPanel('summary');
     })();
   })();
