@@ -1,4 +1,5 @@
-﻿<!--
+<!-- trigger pages -->
+<!--
   ANNOTATIONS for Lease Calculator (pre-refactor)
    Annotated on 2025-10-17 17:31 â€” index.html
  These notes are additive and do not change behavior.
@@ -252,8 +253,8 @@
     <label class="right">Taxes — Pass-through Mode</label>
     <select id="taxesMode" class="select-filled">
       <option value="tenant" selected>Tenant pays 100%</option>
+      <option value="landlord">Landlord pays 100%</option>
       <option value="stop">Base-year stop (increases only)</option>
-      <option value="landlord">Landlord pays</option>
     </select>
   </div>
 
@@ -268,6 +269,141 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="taxes" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="taxesStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="taxes" style="display:none;">
@@ -379,8 +515,8 @@
     <label class="right">CAM — Pass-through Mode</label>
     <select id="camMode" class="select-filled">
       <option value="tenant" selected>Tenant pays 100%</option>
+      <option value="landlord">Landlord pays 100%</option>
       <option value="stop">Base-year stop (increases only)</option>
-      <option value="landlord">Landlord pays</option>
     </select>
   </div>
 
@@ -395,6 +531,141 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="opx-stop" data-for="cam" style="display:none;">
+    <label class="right">Stop Type</label>
+    <div class="inline">
+      <select id="camStopType" class="select-filled">
+        <option value="base" selected>Base-year</option>
+        <option value="fixed">Fixed expense stop</option>
+      </select>
+      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
+        <span class="addon">$</span>
+        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
+        <span class="addon">/SF/yr</span>
+      </div>
+    </div>
   </div>
 
   <div class="opx-stop" data-for="cam" style="display:none;">
@@ -506,8 +777,8 @@
     <label class="right">Insurance — Pass-through Mode</label>
     <select id="insMode" class="select-filled">
       <option value="tenant" selected>Tenant pays 100%</option>
+      <option value="landlord">Landlord pays 100%</option>
       <option value="stop">Base-year stop (increases only)</option>
-      <option value="landlord">Landlord pays</option>
     </select>
   </div>
 
@@ -564,6 +835,16 @@
     </select>
     <small class="hint">Controls who bears the management fee each period.</small>
   </div>
+</div>
+
+<div class="field col-1-2" id="mgmtBaseWrap" style="display:none;">
+  <label for="mgmtBase">Management Fee Base-year ($/SF/yr)</label>
+  <div class="input-with-addon">
+    <span class="addon">$</span>
+    <input id="mgmtBase" type="text" inputmode="decimal" data-format="money" placeholder="leave blank to auto" />
+    <span class="addon">/SF/yr</span>
+  </div>
+  <small class="hint">If blank, we’ll auto-set to the first full lease year.</small>
 </div>
 
 <div class="field col-1-2" id="mgmtBaseWrap" style="display:none;">
@@ -1167,3 +1448,5 @@
 </script>
 </body>
 </html>
+
+
