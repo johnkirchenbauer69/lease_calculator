@@ -61,8 +61,8 @@
   }
 
   .lee-pin {
-    width: 30px;
-    height: 42px;
+    width: 50px;
+    height: 50px;
     display: block;
     pointer-events: none;
     user-select: none;
@@ -111,14 +111,7 @@
     <div class="field col-span-4" id="photoBlock">
       <label>Property Photo</label>
       <div class="photo-row">
-        <input id="propertyPhoto" type="file" accept="image/*" class="visually-hidden" />
-        <div class="file-uploader" id="photoUploader" role="button" tabindex="0" aria-controls="propertyPhoto" aria-describedby="photoHelp">
-          <div class="file-actions">
-            <button type="button" class="btn" id="photoChooseBtn">Choose photo</button>
-            <span class="file-name" id="photoFileName" aria-live="polite">No file chosen</span>
-          </div>
-          <div class="file-help" id="photoHelp">JPG/PNG, up to 10MB. Drag &amp; drop supported.</div>
-        </div>
+        <input id="propertyPhoto" type="file" accept="image/*" />
         <button type="button" id="clearPhoto" class="btn ghost small">Remove</button>
       </div>
       <div class="photo-preview" id="propertyPreviewWrap" aria-hidden="true" style="display:none">
@@ -269,21 +262,6 @@
     <small class="hint">
       Used only when Pass-through Mode = Base-year stop. Leave blank to auto-fill per your escalation model.
     </small>
-  </div>
-
-  <div class="opx-stop" data-for="taxes" style="display:none;">
-    <label class="right">Stop Type</label>
-    <div class="inline">
-      <select id="taxesStopType" class="select-filled">
-        <option value="base" selected>Base-year</option>
-        <option value="fixed">Fixed expense stop</option>
-      </select>
-      <div id="taxesStopPSFWrap" class="input-with-addon" style="display:none;">
-        <span class="addon">$</span>
-        <input id="taxesStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
-        <span class="addon">/SF/yr</span>
-      </div>
-    </div>
   </div>
 
   <div class="opx-stop" data-for="taxes" style="display:none;">
@@ -668,21 +646,6 @@
     </div>
   </div>
 
-  <div class="opx-stop" data-for="cam" style="display:none;">
-    <label class="right">Stop Type</label>
-    <div class="inline">
-      <select id="camStopType" class="select-filled">
-        <option value="base" selected>Base-year</option>
-        <option value="fixed">Fixed expense stop</option>
-      </select>
-      <div id="camStopPSFWrap" class="input-with-addon" style="display:none;">
-        <span class="addon">$</span>
-        <input id="camStopPSF" inputmode="decimal" placeholder="0.00" data-format="money" />
-        <span class="addon">/SF/yr</span>
-      </div>
-    </div>
-  </div>
-
   <!-- Advanced row -->
   <div class="opx-adv col-1-4" data-for="cam" hidden>
     <div class="adv-grid">
@@ -826,25 +789,15 @@
     <small class="hint">Applied to monthly rent before the fee itself.</small>
   </div>
 
-  <div class="field col-1-2">
+  <div class="field col-3-4">
     <label for="mgmtMode">Responsibility</label>
     <select id="mgmtMode" class="select-filled">
+      <option value="landlord">Landlord pays 100%</option>
       <option value="tenant">Tenant pays 100%</option>
       <option value="stop">Base-year stop (increases only)</option>
-      <option value="landlord">Landlord pays 100%</option>
     </select>
     <small class="hint">Controls who bears the management fee each period.</small>
   </div>
-</div>
-
-<div class="field col-1-2" id="mgmtBaseWrap" style="display:none;">
-  <label for="mgmtBase">Management Fee Base-year ($/SF/yr)</label>
-  <div class="input-with-addon">
-    <span class="addon">$</span>
-    <input id="mgmtBase" type="text" inputmode="decimal" data-format="money" placeholder="leave blank to auto" />
-    <span class="addon">/SF/yr</span>
-  </div>
-  <small class="hint">If blank, we’ll auto-set to the first full lease year.</small>
 </div>
 
 <div class="field col-1-2" id="mgmtBaseWrap" style="display:none;">
@@ -958,8 +911,8 @@
           <label>Pass-through Mode</label>
           <select class="cx-mode select-filled">
             <option value="tenant" selected>Tenant pays 100%</option>
+            <option value="landlord">Landlord pays 100%</option>
             <option value="stop">Base-year stop (increases only)</option>
-            <option value="landlord">Landlord pays</option>
           </select>
         </div>
       </div>
@@ -1337,8 +1290,8 @@
 
 <section id="compareSection" class="compare-section hidden">
   <div class="compare-header">
-    <!-- Give the title an id so we can set "Cash Flow Comparison (1—N)" -->
-    <h3 id="scenarioCompareTitle" class="section-title">Cash Flow Comparison (1—3)</h3>
+    <!-- Give the title an id so we can set "Scenario Comparison (1—N)" -->
+    <h3 id="scenarioCompareTitle" class="section-title">Scenario Comparison (1—3)</h3>
 
     <div class="count-ctrl">
       <label for="compareCount">Compare</label>
