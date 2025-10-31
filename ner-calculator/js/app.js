@@ -3488,12 +3488,23 @@ window.addEventListener('load', initMap);
         btnCash: document.getElementById('btnCashFlowComparison'),
         panelSummary: document.getElementById('comparisonSummary'),
         panelCash: document.getElementById('cashFlowComparison'),
-        hiddenRowsWrap: document.getElementById('hiddenRowsToggleWrap')
+        hiddenRowsWrap: document.getElementById('hiddenRowsToggleWrap'),
+        cashGrid: document.getElementById('compareGrid')
       };
 
       if (!els.btnSummary || !els.btnCash || !els.panelSummary || !els.panelCash) {
         console.warn('[LeaseComparison] Missing comparison toggle elements.');
         return;
+      }
+
+      if (els.panelCash && els.cashGrid && !els.panelCash.contains(els.cashGrid)) {
+        console.info('[LeaseComparison] Root cause: #compareGrid was mounted outside #cashFlowComparison, so summary view still exposed the cash-flow table. Relocating grid into the cash panel.');
+        const anchor = els.panelCash.querySelector('.cf-compare');
+        if (anchor && anchor.parentNode === els.panelCash) {
+          els.panelCash.insertBefore(els.cashGrid, anchor);
+        } else {
+          els.panelCash.appendChild(els.cashGrid);
+        }
       }
 
       function renderSummaryIfNeeded() {
@@ -3521,7 +3532,13 @@ window.addEventListener('load', initMap);
         const isSummary = mode === 'summary';
         els.panelSummary?.classList.toggle('hidden', !isSummary);
         els.panelCash?.classList.toggle('hidden', isSummary);
-        els.hiddenRowsWrap?.classList.toggle('hidden', isSummary);
+        if (els.hiddenRowsWrap) {
+          if (isSummary) els.hiddenRowsWrap.classList.add('hidden');
+          else els.hiddenRowsWrap.classList.remove('hidden');
+        }
+        if (els.cashGrid && !els.panelCash?.contains(els.cashGrid)) {
+          els.cashGrid.classList.toggle('hidden', isSummary);
+        }
         setActive(mode);
         if (isSummary) {
           renderSummaryIfNeeded();
