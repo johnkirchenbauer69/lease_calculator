@@ -57,6 +57,39 @@
       const total = isPerSF ? (amount * area) : amount;
       return treat === 'cash' ? total : 0;
     }
+
+    // Returns normalized KPI metrics for downstream cards & compare views.
+    function buildKpis({
+      schedule,
+      termMonths,
+      totalNetRent,
+      totalGrossRent,
+      totalBaseRent,
+      totalRecoveries,
+      totalOpex
+    } = {}) {
+      const safe = (n) => (Number.isFinite(n) ? n : 0);
+      const scheduleMonths = Array.isArray(schedule)
+        ? schedule.reduce((count, row) => (row && row.isTermMonth ? count + 1 : count), 0) || schedule.length || 0
+        : 0;
+      const months = (Number.isFinite(termMonths) && termMonths > 0)
+        ? termMonths
+        : scheduleMonths;
+
+      const net = safe(totalNetRent);
+      const gross = safe(totalGrossRent);
+
+      return {
+        termMonths: months,
+        totalNetRent: net,
+        totalGrossRent: gross,
+        totalBaseRent: safe(totalBaseRent),
+        totalRecoveries: safe(totalRecoveries),
+        totalOpex: safe(totalOpex),
+        avgMonthlyNet: months ? net / months : 0,
+        avgMonthlyGross: months ? gross / months : 0
+      };
+    }
   
     // LL Gross excludes pass-through recoveries across all service types.
     function includeOpExInGross(perspective, serviceType) {
@@ -2266,14 +2299,30 @@ window.addEventListener('load', initMap);
         const nerPV = (yearsTerm > 0 && area > 0)
           ? ((pvRentNet - pvTI_forNER) / area) / yearsTerm
           : 0;
-  
+
         const nerSimple = (yearsTerm > 0 && area > 0)
           ? ((totalPaidNet - llAllowanceApplied) / area) / yearsTerm
           : 0;
-  
-        const avgNetMonthly = term > 0 ? (totalPaidNet / term) : 0;
-        const avgGrossMonthly = term > 0 ? (totalPaidGross / term) : 0;
-  
+
+        let totalBaseRentNominal = 0;
+        schedule.forEach(row => {
+          if (!row || !row.isTermMonth) return;
+          const paidBase = (+row.preBase$ || 0) - (+row.freeBase$ || 0);
+          totalBaseRentNominal += paidBase;
+        });
+
+        const safeNum = (n) => (Number.isFinite(n) ? n : 0);
+        const kpis = buildKpis({
+          schedule,
+          termMonths: term,
+          totalNetRent: safeNum(totalPaidNet),
+          totalGrossRent: safeNum(totalPaidGross),
+          totalBaseRent: safeNum(totalBaseRentNominal),
+          totalRecoveries: undefined,
+          totalOpex: safeNum(totalLLOpex)
+        });
+        const { avgMonthlyNet, avgMonthlyGross, termMonths: safeTermMonths } = kpis;
+
         const grossSummaries = summarizeGrossByPerspective({
           schedule,
           area,
@@ -2281,21 +2330,25 @@ window.addEventListener('load', initMap);
         });
         const perspectiveKey = (activePerspective === 'tenant') ? 'tenant' : 'landlord';
         const grossSummaryForCards = grossSummaries[perspectiveKey] || grossSummaries.tenant || {
-          avgMonthlyGross: avgGrossMonthly,
-          totalGross: totalPaidGross
+          avgMonthlyGross,
+          totalGross: kpis.totalGrossRent
         };
-  
+
         // ----- KPI: Spread & Recovery
-        const avgMonthlySpread = (totalPaidGross - totalPaidNet) / term;           // $/mo
+        const avgMonthlySpread = safeTermMonths > 0
+          ? (kpis.totalGrossRent - kpis.totalNetRent) / safeTermMonths
+          : 0;           // $/mo
         const recoveryRatio = (tenantOpExNominal + totalLLOpex) > 0
           ? tenantOpExNominal / (tenantOpExNominal + totalLLOpex)
           : null;
-  
+
         // ----- KPI: All-in occupancy (avg gross per SF per month)
-        const occPSFmo = (totalPaidGross / term) / area;
-  
+        const occPSFmo = (safeTermMonths > 0 && area > 0)
+          ? (kpis.totalGrossRent / safeTermMonths) / area
+          : 0;
+
         // ----- KPI: Free Rent (PV) + (% term abated)
-        const pctAbated = term > 0 ? (abatedMonths / term) : 0;
+        const pctAbated = safeTermMonths > 0 ? (abatedMonths / safeTermMonths) : 0;
   
         // ----- Commission (Nominal & PV) – assume paid upfront on chosen basis
         let commissionNominal = 0;
@@ -2379,9 +2432,9 @@ window.addEventListener('load', initMap);
         // Write KPI cards (if present)
         if (nerPVEl) nerPVEl.textContent = formatUSD(nerPV);
         if (nerSimpleEl) nerSimpleEl.textContent = formatUSD(nerSimple);
-        if (avgNetMonthlyEl) avgNetMonthlyEl.textContent = formatUSD(avgNetMonthly);
+        if (avgNetMonthlyEl) avgNetMonthlyEl.textContent = formatUSD(avgMonthlyNet);
         if (avgGrossMonthlyEl) avgGrossMonthlyEl.textContent = formatUSD(grossSummaryForCards.avgMonthlyGross);
-        if (totalNetEl) totalNetEl.textContent = formatUSD(totalPaidNet);
+        if (totalNetEl) totalNetEl.textContent = formatUSD(kpis.totalNetRent);
         if (totalGrossEl) totalGrossEl.textContent = formatUSD(grossSummaryForCards.totalGross);
       
         function renderKpis(data) {
@@ -2418,10 +2471,10 @@ window.addEventListener('load', initMap);
           })(),
           nerPV,
           simpleNet: nerSimple,
-          avgNetMonthly,
-          avgGrossMonthly,
-          totalPaidNet,
-          totalPaidGross,
+          avgNetMonthly: avgMonthlyNet,
+          avgGrossMonthly: avgMonthlyGross,
+          totalPaidNet: kpis.totalNetRent,
+          totalPaidGross: kpis.totalGrossRent,
           schedule,
           compareSeries: {
             landlordFreeTI,
@@ -2496,13 +2549,6 @@ window.addEventListener('load', initMap);
             return val > max ? val : max;
           }, 0);
         }
-
-        let totalBaseRentNominal = 0;
-        schedule.forEach(row => {
-          if (!row || !row.isTermMonth) return;
-          const paidBase = (+row.preBase$ || 0) - (+row.freeBase$ || 0);
-          totalBaseRentNominal += paidBase;
-        });
 
         const freeMonthsTotal = Math.max(0, (freeMonths || 0) + (customPatternMonths || 0));
         const primaryEscPct = (() => {
@@ -2598,8 +2644,11 @@ window.addEventListener('load', initMap);
           firstMonthRent: firstMonthGross,
           lastMonthRent: lastMonthGross,
           peakMonthly: peakMonthlyGross,
-          summaryChips: leaseTiming?.chips || []
+          summaryChips: leaseTiming?.chips || [],
+          topline: kpis
         };
+
+        model.toplineKpis = kpis;
   
 
         // update the new KPI cards (function you already defined above)
