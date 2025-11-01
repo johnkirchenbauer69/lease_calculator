@@ -3490,20 +3490,31 @@ td[data-unit][title] {
   order:1;
 }
 .compare-section {
-  max-width:1440px;
+  max-width:1600px;
   margin:0 auto;
   width:100%;
-  padding:0 12px 24px;
+  padding:0 24px 24px;
+  overflow-x:hidden;
 }
 .comparison-summary {
   position:relative;
   --summary-label-width:260px;
   --summary-card-width:360px;
   --summary-card-height:232px;
+  overflow-x:hidden;
 }
 
 .comparison-summary .summary-wrap {
   position:relative;
+  width:100%;
+  overflow-x:hidden;
+}
+#comparisonSummary {
+  width:100%;
+  overflow-x:hidden;
+}
+.panel-results {
+  overflow-x:hidden;
 }
 
 .summary-grid {
@@ -3515,6 +3526,8 @@ td[data-unit][title] {
   border:1px solid #1f232a;
   position:relative;
   z-index:1;
+  contain:content;
+  scrollbar-gutter:stable both-edges;
   max-width:100%;
   width:min(100%, calc(var(--summary-label-width) + 3 * var(--summary-card-width)));
   margin:0 auto;
@@ -3641,20 +3654,12 @@ td[data-unit][title] {
 }
 .summary-grid .summary-term-value {
   flex:0 0 auto;
+  white-space:nowrap;
 }
 .summary-grid .summary-term-range {
   display:inline-flex;
   align-items:center;
   flex:0 1 auto;
-  min-width:0;
-  max-width:100%;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.summary-grid .summary-term-range .chip {
-  display:inline-flex;
-  align-items:center;
   min-width:0;
   max-width:100%;
   overflow:hidden;
