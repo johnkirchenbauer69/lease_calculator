@@ -1330,17 +1330,19 @@ function renderCompareGrid() {
   }
 
   function buildSummaryTable(entries, { showHidden = false, perspective }) {
-    const theadCols = entries.map(({ kpi }) => {
+    const theadCols = entries.map(({ kpi }, idx) => {
       const chips = [
         chip(`Term ${_fmtInt(kpi.termMonths)} mo`),
         chip(`${_fmtInt(kpi.freeMonths ?? 0)} mo free`),
         kpi.freePlacement ? chip(formatPlacementText(kpi.freePlacement), kpi.freePlacement === 'outside' ? 'red' : '') : ''
       ].filter(Boolean).join(' ');
       return `
-        <th class="col-card">
-          ${photo(kpi.photoUrl)}
-          <div style="margin-top:8px;font-weight:700">${escapeHtml(kpi.title || '')}</div>
-          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+        <th class="col-card summary-col summary-col-${idx}" data-col="${idx}"${idx === 0 ? ' data-rank="1"' : ''}>
+          <div class="summary-col-inner">
+            ${photo(kpi.photoUrl)}
+            <div style="margin-top:8px;font-weight:700">${escapeHtml(kpi.title || '')}</div>
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+          </div>
         </th>`;
     }).join('');
 
@@ -1384,7 +1386,8 @@ function renderCompareGrid() {
           const hasDisplayValue = numericHasValue || textualHasValue;
           const bestClass = (idx === bestIdx && numericHasValue) ? 'best' : '';
           const dimClass = hasDisplayValue ? '' : 'dim';
-          return `<td class="${bestClass} ${dimClass}">${formatted}</td>`;
+          const leaderAttr = idx === 0 ? ' data-rank="1"' : '';
+          return `<td class="summary-col summary-col-${idx} ${bestClass} ${dimClass}" data-col="${idx}"${leaderAttr}><div class="summary-col-inner">${formatted}</div></td>`;
         }).join('');
         tbodyHTML += `<tr data-row="${metric.key}">${labelCell}${cells}</tr>`;
       });
