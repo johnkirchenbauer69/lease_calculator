@@ -3529,8 +3529,8 @@ td[data-unit][title] {
   contain:content;
   scrollbar-gutter:stable both-edges;
   max-width:100%;
-  width:min(100%, calc(var(--summary-label-width) + 3 * var(--summary-card-width)));
-  margin:0 auto;
+  width:100%;
+  margin:0;
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
@@ -3540,7 +3540,7 @@ td[data-unit][title] {
   border-collapse:separate;
   border-spacing:0;
   width:max-content;
-  min-width:calc(var(--summary-label-width) + 3 * var(--summary-card-width));
+  min-width:calc(var(--summary-label-width) + var(--summary-visible-count, 3) * var(--summary-card-width));
   table-layout:fixed;
 }
 .summary-grid th,

@@ -1450,6 +1450,31 @@ function renderCompareGrid() {
     return host;
   }
 
+  const SUMMARY_CARD_WIDTH_MIN = 320;
+  const SUMMARY_CARD_WIDTH_MAX = 440;
+
+  function configureSummaryViewport(grid, columnCount) {
+    if (!grid) return;
+    const wrap = grid.parentElement;
+    if (!wrap) return;
+
+    const computed = getComputedStyle(grid);
+    const labelWidth = parseFloat(computed.getPropertyValue('--summary-label-width')) || 260;
+    const visible = Math.max(1, Math.min(columnCount, 3));
+    const available = wrap.clientWidth || 0;
+    if (!available || available <= labelWidth) {
+      grid.style.setProperty('--summary-card-width', `${SUMMARY_CARD_WIDTH_MIN}px`);
+      grid.style.setProperty('--summary-visible-count', String(visible));
+      return;
+    }
+
+    const rawWidth = (available - labelWidth) / visible;
+    const snapped = Math.floor(rawWidth);
+    const cardWidth = Math.max(SUMMARY_CARD_WIDTH_MIN, Math.min(SUMMARY_CARD_WIDTH_MAX, snapped));
+    grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
+    grid.style.setProperty('--summary-visible-count', String(visible));
+  }
+
   function updateSummaryUnderlays() {
     const mount = document.getElementById('comparisonSummary');
     if (!mount) return;
@@ -1472,12 +1497,15 @@ function renderCompareGrid() {
     const scrollLeft = grid.scrollLeft;
     const scrollTop = grid.scrollTop;
 
+    const dpr = window.devicePixelRatio || 1;
+    const snap = (value) => Math.round(value * dpr) / dpr;
+
     const headerRect = headers[0].getBoundingClientRect();
     const firstRect = rows[0].getBoundingClientRect();
     const lastRect = rows[rows.length - 1].getBoundingClientRect();
 
-    const top = Math.min(headerRect.top, firstRect.top) - gridRect.top + scrollTop;
-    const bottom = Math.max(lastRect.bottom, headerRect.bottom) - gridRect.top + scrollTop;
+    const top = snap(Math.min(headerRect.top, firstRect.top) - gridRect.top + scrollTop);
+    const bottom = snap(Math.max(lastRect.bottom, headerRect.bottom) - gridRect.top + scrollTop);
     const height = Math.max(0, bottom - top);
 
     const existing = Array.from(host.children);
@@ -1496,10 +1524,11 @@ function renderCompareGrid() {
     Array.from(host.children).forEach((node, idx) => {
       const header = headers[idx];
       const rect = header.getBoundingClientRect();
-      const left = rect.left - gridRect.left + scrollLeft;
+      const left = snap(rect.left - gridRect.left + scrollLeft);
+      const width = snap(rect.width);
       node.style.left = `${left}px`;
       node.style.top = `${top}px`;
-      node.style.width = `${rect.width}px`;
+      node.style.width = `${width}px`;
       node.style.height = `${height}px`;
       node.classList.toggle('is-leader', idx === 0);
     });
@@ -1536,6 +1565,7 @@ function renderCompareGrid() {
       });
     }
 
+    const columnCount = ordered.length;
     const html = buildSummaryTable(ordered, { showHidden, perspective });
     mount.innerHTML = `<div class="summary-wrap">${html}</div>`;
 
@@ -1558,12 +1588,33 @@ function renderCompareGrid() {
 
     const grid = mount.querySelector('.summary-grid');
     if (grid) {
+      configureSummaryViewport(grid, columnCount);
+      scheduleSummaryUnderlayUpdate();
+
       if (!grid.hasAttribute('tabindex')) {
         grid.setAttribute('tabindex', '0');
         grid.setAttribute('role', 'region');
         grid.setAttribute('aria-label', 'Comparison summary scroll area');
       }
       grid.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
+
+      const wrap = mount.querySelector('.summary-wrap');
+      if (window.__summaryResizeObserver) {
+        window.__summaryResizeObserver.disconnect();
+      }
+      if (wrap) {
+        const ro = new ResizeObserver(() => {
+          configureSummaryViewport(grid, columnCount);
+          scheduleSummaryUnderlayUpdate();
+        });
+        ro.observe(wrap);
+        window.__summaryResizeObserver = ro;
+      }
+
+      requestAnimationFrame(() => {
+        configureSummaryViewport(grid, columnCount);
+        scheduleSummaryUnderlayUpdate();
+      });
     }
 
     scheduleSummaryUnderlayUpdate();
