@@ -1352,8 +1352,8 @@ function renderCompareGrid() {
       tbodyHTML += `
         <tr class="group-row">
           <td colspan="${entries.length + 1}">
-            <div class="cs-section-header" role="heading" aria-level="3">
-              <span class="cs-section-badge">${safeGroup}</span>
+            <div class="section-header-bar" role="heading" aria-level="3">
+              <span class="section-header-label">${safeGroup}</span>
             </div>
           </td>
         </tr>`;
