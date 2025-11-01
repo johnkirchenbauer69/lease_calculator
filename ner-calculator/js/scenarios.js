@@ -1519,17 +1519,7 @@ function renderCompareGrid() {
     }
 
     const html = buildSummaryTable(ordered, { showHidden, perspective });
-
-    const wrap = document.createElement('div');
-    wrap.className = 'summary-wrap';
-
-    const viewport = document.createElement('div');
-    viewport.className = 'summary-viewport';
-    viewport.innerHTML = html;
-    wrap.appendChild(viewport);
-
-    mount.innerHTML = '';
-    mount.appendChild(wrap);
+    mount.innerHTML = `<div class="summary-wrap"><div class="summary-viewport">${html}</div></div>`;
 
     mount.querySelectorAll('.metric-col.sortable').forEach(el => {
       el.addEventListener('click', () => {
@@ -1548,13 +1538,12 @@ function renderCompareGrid() {
       });
     });
 
-    const viewportEl = mount.querySelector('.summary-viewport');
-    if (viewportEl) {
-      viewportEl.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
+    const viewport = mount.querySelector('.summary-viewport');
+    if (viewport) {
+      viewport.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
     }
 
     scheduleSummaryUnderlayUpdate();
-    updateSummaryUnderlays();
   };
 
   if (!window.__summaryUnderlayResizeBound) {
