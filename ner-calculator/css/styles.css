@@ -3738,16 +3738,10 @@ td[data-unit][title] {
   height:0;
   border-radius:12px;
   background:rgba(255,255,255,0.035);
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.05) inset,
-    0 10px 28px rgba(0,0,0,0.28);
-  transition:box-shadow .25s ease, background .25s ease;
+  transition:background .25s ease;
 }
 
 .comparison-summary .summary-col-bg.is-leader {
-  box-shadow:
-    0 0 0 1px rgba(231,29,54,0.35) inset,
-    0 12px 32px rgba(231,29,54,0.25);
   background:rgba(231,29,54,0.08);
 }
 
