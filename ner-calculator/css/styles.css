@@ -3487,12 +3487,18 @@ td[data-unit][title] {
 }
 .summary-grid {
   display:block;
-  overflow:auto;
+  max-width:100%;
+  overflow-x:auto;
+  overflow-y:auto;
   border-radius:12px;
   background:#0e1116;
   border:1px solid #1f232a;
   position:relative;
   z-index:1;
+}
+.comparison-summary .summary-wrap {
+  max-width:100%;
+  overflow-x:auto;
 }
 .summary-grid table {
   border-collapse:separate;
