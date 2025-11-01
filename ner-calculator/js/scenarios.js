@@ -1456,6 +1456,9 @@ function renderCompareGrid() {
   function configureSummaryViewport(grid, columnCount) {
     if (!grid) return;
 
+    const table = grid.querySelector('table');
+    if (!table) return;
+
     const computed = getComputedStyle(grid);
     const parseSize = (value, fallback = 0) => {
       if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
@@ -1471,23 +1474,27 @@ function renderCompareGrid() {
       parseSize(computed.borderInlineEndWidth ?? computed.borderRightWidth);
     const scrollbarWidth = Math.max(0, grid.offsetWidth - grid.clientWidth);
 
-    let contentWidth = parseSize(grid.clientWidth, 0);
+    let contentWidth = Number.isFinite(grid.clientWidth) ? grid.clientWidth : 0;
     contentWidth -= paddingInline;
     contentWidth -= borderInline;
     contentWidth -= scrollbarWidth;
     contentWidth = Math.max(0, contentWidth);
 
     const labelWidth = parseSize(computed.getPropertyValue('--summary-label-width'), 260);
-    const visible = Math.max(1, Math.min(columnCount, 3));
-    const usable = Math.max(0, contentWidth - labelWidth);
-    const rawWidth = visible ? Math.floor(usable / visible) : SUMMARY_CARD_WIDTH_MIN;
+    const rawWidth = Math.floor((contentWidth - labelWidth) / 3);
     const cardWidth = Math.max(
       SUMMARY_CARD_WIDTH_MIN,
       Math.min(SUMMARY_CARD_WIDTH_MAX, rawWidth)
     );
+    const visible = Math.max(1, Math.min(columnCount, 3));
 
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
     grid.style.setProperty('--summary-visible-count', String(visible));
+
+    const constrainedWidth = 'calc(var(--summary-label-width) + 3 * var(--summary-card-width))';
+    table.style.minWidth = constrainedWidth;
+    table.style.maxWidth = constrainedWidth;
+
     scheduleSummaryUnderlayUpdate();
   }
 

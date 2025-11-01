@@ -3551,6 +3551,7 @@ td[data-unit][title] {
   vertical-align:middle;
   overflow:hidden;
   text-overflow:ellipsis;
+  box-sizing:border-box;
 }
 .summary-grid thead th {
   position:sticky;
