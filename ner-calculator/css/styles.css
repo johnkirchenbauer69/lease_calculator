@@ -3487,7 +3487,7 @@ td[data-unit][title] {
 }
 .summary-grid {
   display:inline-block;
-  min-width:100%;
+  width:100%;
   border-radius:12px;
   background:#0e1116;
   border:1px solid #1f232a;
@@ -3496,7 +3496,7 @@ td[data-unit][title] {
 }
 .comparison-summary {
   --summary-label-width:260px;
-  --summary-scenario-width:260px;
+  --summary-scenario-width:420px;
 }
 .comparison-summary .summary-wrap {
   max-width:100%;
@@ -3510,12 +3510,11 @@ td[data-unit][title] {
 .summary-grid table {
   border-collapse:separate;
   border-spacing:0;
-  width:100%;
+  width:max-content;
   min-width:100%;
 }
 .comparison-summary .summary-grid table {
-  width:calc(var(--summary-label-width) + var(--summary-col-count, 0) * var(--summary-scenario-width));
-  min-width:100%;
+  width:max-content;
   table-layout:fixed;
 }
 .summary-grid th,
@@ -3537,9 +3536,7 @@ td[data-unit][title] {
   left:0;
   background:#0e1116;
   z-index:3;
-  width:var(--summary-label-width, 260px);
-  min-width:var(--summary-label-width, 260px);
-  max-width:var(--summary-label-width, 260px);
+  width:260px;
   font-weight:700;
 }
 .summary-grid tbody td.metric-col {
@@ -3551,15 +3548,14 @@ td[data-unit][title] {
   background:transparent;
 }
 .summary-grid .col-card {
-  width:var(--summary-scenario-width, 260px);
-  min-width:var(--summary-scenario-width, 260px);
-  max-width:var(--summary-scenario-width, 260px);
+  width:420px;
+}
+.summary-grid tbody td:not(.metric-col) {
+  width:420px;
 }
 .comparison-summary .summary-grid th:not(.metric-col),
 .comparison-summary .summary-grid td:not(.metric-col) {
-  width:var(--summary-scenario-width);
-  min-width:var(--summary-scenario-width);
-  max-width:var(--summary-scenario-width);
+  width:420px;
 }
 .summary-grid .best {
   background: radial-gradient(600px 80px at 0% 50%, rgba(231,29,54,.10), transparent);
