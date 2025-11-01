@@ -1461,14 +1461,16 @@ function renderCompareGrid() {
     const computed = getComputedStyle(grid);
     const labelWidth = parseFloat(computed.getPropertyValue('--summary-label-width')) || 260;
     const visible = Math.max(1, Math.min(columnCount, 3));
-    const available = wrap.clientWidth || 0;
-    if (!available || available <= labelWidth) {
+    const wrapWidth = wrap.clientWidth || 0;
+    const chrome = Math.max(0, grid.offsetWidth - grid.clientWidth);
+    const inner = Math.max(0, wrapWidth - chrome);
+    if (!inner || inner <= labelWidth) {
       grid.style.setProperty('--summary-card-width', `${SUMMARY_CARD_WIDTH_MIN}px`);
       grid.style.setProperty('--summary-visible-count', String(visible));
       return;
     }
 
-    const rawWidth = (available - labelWidth) / visible;
+    const rawWidth = (inner - labelWidth) / visible;
     const snapped = Math.floor(rawWidth);
     const cardWidth = Math.max(SUMMARY_CARD_WIDTH_MIN, Math.min(SUMMARY_CARD_WIDTH_MAX, snapped));
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
@@ -1612,6 +1614,7 @@ function renderCompareGrid() {
       }
 
       requestAnimationFrame(() => {
+        if (!grid.isConnected) return;
         configureSummaryViewport(grid, columnCount);
         scheduleSummaryUnderlayUpdate();
       });
