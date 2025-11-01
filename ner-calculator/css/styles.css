@@ -3515,9 +3515,9 @@ td[data-unit][title] {
   border:1px solid #1f232a;
   position:relative;
   z-index:1;
+  max-width:100%;
   width:100%;
   margin:0;
-  padding-inline-end:max(0px, calc(100% - (var(--summary-label-width) + 3 * var(--summary-card-width))));
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
@@ -3632,6 +3632,26 @@ td[data-unit][title] {
   overflow:hidden;
   max-height:48px;
 }
+.summary-grid .summary-term-cell {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-width:0;
+}
+.summary-grid .summary-term-value {
+  flex:0 0 auto;
+}
+.summary-grid .summary-term-range {
+  display:inline-flex;
+  align-items:center;
+  flex:0 1 auto;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
 .summary-grid .summary-card-chips .chip {
   margin:0;
 }
@@ -3649,25 +3669,6 @@ td[data-unit][title] {
   background:#1a1e25;
   color:#cbd5e1;
   border:1px solid #232832;
-}
-.summary-grid .metric-cell {
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:6px;
-  white-space:normal;
-}
-.summary-grid .metric-cell-primary {
-  white-space:nowrap;
-}
-.summary-grid .metric-cell-chip {
-  display:flex;
-  flex-wrap:wrap;
-  gap:6px;
-  max-width:100%;
-}
-.summary-grid .metric-cell.has-chip .metric-cell-chip {
-  width:100%;
 }
 .summary-grid .chip.red {
   border-color:#e71d36;

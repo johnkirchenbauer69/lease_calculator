@@ -1117,16 +1117,6 @@ function renderCompareGrid() {
 
   const stripTags = (str = '') => String(str).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   const chip = (txt, cls = '') => `<span class="chip ${cls}">${escapeHtml(txt)}</span>`;
-  const metricCell = ({ primary = '', chipHtml = '', chipTitle = '' } = {}) => {
-    const hasChip = Boolean(chipHtml && String(chipHtml).trim());
-    const titleAttr = hasChip && chipTitle
-      ? ` title="${escapeHtml(chipTitle)}"`
-      : '';
-    const chipBlock = hasChip
-      ? `<div class="metric-cell-chip"${titleAttr}>${chipHtml}</div>`
-      : '';
-    return `<div class="metric-cell${hasChip ? ' has-chip' : ''}"><div class="metric-cell-primary">${primary}</div>${chipBlock}</div>`;
-  };
   const photo = (url) => {
     const safeUrl = url ? escapeHtml(url) : '';
     const img = safeUrl
@@ -1211,19 +1201,19 @@ function renderCompareGrid() {
     { key: 'term', group: 'Deal Basics', label: 'Term (months)',
       better: { tenant: 'lower', landlord: 'lower' },
       calc: ({ kpi }) => kpi.termMonths,
-      fmt: (v, { kpi }) => {
-        const primary = escapeHtml(_fmtInt(v));
-        const startStr = fmtDate(kpi?.startDate);
-        const endStr = fmtDate(kpi?.endDate);
-        const hasStart = startStr && startStr !== '—';
-        const hasEnd = endStr && endStr !== '—';
-        const hasRange = hasStart || hasEnd;
-        if (!hasRange) {
-          return metricCell({ primary });
+      fmt: (v, ctx) => {
+        const monthsText = _fmtInt(v);
+        const safeMonths = escapeHtml(monthsText);
+        const start = fmtDate(ctx?.kpi?.startDate);
+        const end = fmtDate(ctx?.kpi?.endDate);
+        const hasRange = start !== '—' && end !== '—';
+        let rangeHtml = '';
+        if (hasRange) {
+          const range = `${start} – ${end}`;
+          const safeRange = escapeHtml(range);
+          rangeHtml = `<span class="chip summary-term-range" title="${safeRange}">${safeRange}</span>`;
         }
-        const rangeText = `${hasStart ? startStr : '—'} – ${hasEnd ? endStr : '—'}`;
-        const chipHtml = chip(rangeText);
-        return metricCell({ primary, chipHtml, chipTitle: rangeText });
+        return `<span class="summary-term-cell"><span class="summary-term-value">${safeMonths}</span>${rangeHtml}</span>`;
       }
     },
     { key: 'freeMonths', group: 'Deal Basics', label: 'Free Months (inside/outside)',
@@ -1394,8 +1384,7 @@ function renderCompareGrid() {
         const bestIdx = better === 'none' ? -1 : pickBest(rawVals, better);
         const sortableClass = metric.sortable === false ? '' : ' sortable';
         const labelTitle = escapeHtml(metric.label);
-        const labelContent = metricCell({ primary: labelTitle });
-        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}" title="${labelTitle}">${labelContent}</td>`;
+        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}" title="${labelTitle}">${metric.label}</td>`;
         const cells = rawVals.map((val, idx) => {
           const ctx = entries[idx];
           const formatted = metric.fmt ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective }) : (val ?? '—');
