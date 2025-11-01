@@ -1330,19 +1330,17 @@ function renderCompareGrid() {
   }
 
   function buildSummaryTable(entries, { showHidden = false, perspective }) {
-    const theadCols = entries.map(({ kpi }, idx) => {
+    const theadCols = entries.map(({ kpi }) => {
       const chips = [
         chip(`Term ${_fmtInt(kpi.termMonths)} mo`),
         chip(`${_fmtInt(kpi.freeMonths ?? 0)} mo free`),
         kpi.freePlacement ? chip(formatPlacementText(kpi.freePlacement), kpi.freePlacement === 'outside' ? 'red' : '') : ''
       ].filter(Boolean).join(' ');
       return `
-        <th class="col-card summary-col summary-col-${idx}" data-col="${idx}"${idx === 0 ? ' data-rank="1"' : ''}>
-          <div class="summary-col-inner">
-            ${photo(kpi.photoUrl)}
-            <div style="margin-top:8px;font-weight:700">${escapeHtml(kpi.title || '')}</div>
-            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
-          </div>
+        <th class="col-card">
+          ${photo(kpi.photoUrl)}
+          <div style="margin-top:8px;font-weight:700">${escapeHtml(kpi.title || '')}</div>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
         </th>`;
     }).join('');
 
@@ -1386,8 +1384,7 @@ function renderCompareGrid() {
           const hasDisplayValue = numericHasValue || textualHasValue;
           const bestClass = (idx === bestIdx && numericHasValue) ? 'best' : '';
           const dimClass = hasDisplayValue ? '' : 'dim';
-          const leaderAttr = idx === 0 ? ' data-rank="1"' : '';
-          return `<td class="summary-col summary-col-${idx} ${bestClass} ${dimClass}" data-col="${idx}"${leaderAttr}><div class="summary-col-inner">${formatted}</div></td>`;
+          return `<td class="${bestClass} ${dimClass}">${formatted}</td>`;
         }).join('');
         tbodyHTML += `<tr data-row="${metric.key}">${labelCell}${cells}</tr>`;
       });
@@ -1407,13 +1404,92 @@ function renderCompareGrid() {
       </div>`;
   }
 
+  let summaryUnderlayRaf = null;
+
+  function scheduleSummaryUnderlayUpdate() {
+    if (summaryUnderlayRaf != null) {
+      cancelAnimationFrame(summaryUnderlayRaf);
+    }
+    summaryUnderlayRaf = requestAnimationFrame(() => {
+      summaryUnderlayRaf = null;
+      updateSummaryUnderlays();
+    });
+  }
+
+  function ensureUnderlayHost(grid) {
+    if (!grid) return null;
+    let host = grid.querySelector('.summary-col-underlays');
+    if (!host) {
+      host = document.createElement('div');
+      host.className = 'summary-col-underlays';
+      // host sits under the scrollable table so column backgrounds remain in one layer
+      grid.insertAdjacentElement('afterbegin', host);
+    }
+    return host;
+  }
+
+  function updateSummaryUnderlays() {
+    const mount = document.getElementById('comparisonSummary');
+    if (!mount) return;
+    const wrap = mount.querySelector('.summary-wrap');
+    const grid = wrap?.querySelector('.summary-grid');
+    const table = grid?.querySelector('table');
+    if (!wrap || !grid || !table) return;
+
+    const headers = table.querySelectorAll('thead th.col-card');
+    if (!headers.length) return;
+
+    const dataRows = Array.from(table.querySelectorAll('tbody tr[data-row]'));
+    const rows = dataRows.length ? dataRows : Array.from(table.querySelectorAll('tbody tr'));
+    if (!rows.length) return;
+
+    const host = ensureUnderlayHost(grid);
+    if (!host) return;
+
+    const gridRect = grid.getBoundingClientRect();
+    const scrollLeft = grid.scrollLeft;
+    const scrollTop = grid.scrollTop;
+
+    const headerRect = headers[0].getBoundingClientRect();
+    const firstRect = rows[0].getBoundingClientRect();
+    const lastRect = rows[rows.length - 1].getBoundingClientRect();
+
+    const top = Math.min(headerRect.top, firstRect.top) - gridRect.top + scrollTop;
+    const bottom = Math.max(lastRect.bottom, headerRect.bottom) - gridRect.top + scrollTop;
+    const height = Math.max(0, bottom - top);
+
+    const existing = Array.from(host.children);
+    const needed = headers.length;
+
+    if (existing.length > needed) {
+      existing.slice(needed).forEach(node => node.remove());
+    }
+
+    while (host.children.length < needed) {
+      const bg = document.createElement('div');
+      bg.className = 'summary-col-bg';
+      host.appendChild(bg);
+    }
+
+    Array.from(host.children).forEach((node, idx) => {
+      const header = headers[idx];
+      const rect = header.getBoundingClientRect();
+      const left = rect.left - gridRect.left + scrollLeft;
+      node.style.left = `${left}px`;
+      node.style.top = `${top}px`;
+      node.style.width = `${rect.width}px`;
+      node.style.height = `${height}px`;
+      node.classList.toggle('is-leader', idx === 0);
+    });
+  }
+
   window.renderComparisonSummary = function renderComparisonSummary({ showHidden = false } = {}) {
     const mount = document.getElementById('comparisonSummary');
     if (!mount) return;
 
     const models = _getCompareModels();
     if (!models.length) {
-      mount.innerHTML = '<div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div>';
+      mount.innerHTML = '<div class="summary-wrap"><div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div></div>';
       return;
     }
 
@@ -1439,7 +1515,7 @@ function renderCompareGrid() {
     }
 
     const html = buildSummaryTable(ordered, { showHidden, perspective });
-    mount.innerHTML = html;
+    mount.innerHTML = `<div class="summary-wrap">${html}</div>`;
 
     mount.querySelectorAll('.metric-col.sortable').forEach(el => {
       el.addEventListener('click', () => {
@@ -1457,7 +1533,19 @@ function renderCompareGrid() {
         window.renderComparisonSummary({ showHidden: !!toggle?.checked });
       });
     });
+
+    const grid = mount.querySelector('.summary-grid');
+    if (grid) {
+      grid.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
+    }
+
+    scheduleSummaryUnderlayUpdate();
   };
+
+  if (!window.__summaryUnderlayResizeBound) {
+    window.addEventListener('resize', scheduleSummaryUnderlayUpdate);
+    window.__summaryUnderlayResizeBound = true;
+  }
 })();
 
 /* ---------- boot ---------------------------------------------------------- */

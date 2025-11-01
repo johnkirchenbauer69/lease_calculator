@@ -3482,8 +3482,8 @@ td[data-unit][title] {
 .compare-controls .compareCount {
   order:2;
 }
-.compare-header #hiddenRowsToggleWrap {
-  margin-left:auto;
+.compare-controls #hiddenRowsToggleWrap {
+  order:1;
 }
 .summary-grid {
   display:block;
@@ -3491,6 +3491,8 @@ td[data-unit][title] {
   border-radius:12px;
   background:#0e1116;
   border:1px solid #1f232a;
+  position:relative;
+  z-index:1;
 }
 .summary-grid table {
   border-collapse:separate;
@@ -3531,86 +3533,11 @@ td[data-unit][title] {
 .summary-grid .col-card {
   min-width:260px;
 }
-.summary-grid th.summary-col,
-.summary-grid td.summary-col {
-  padding:0;
+.summary-grid .best {
+  background: radial-gradient(600px 80px at 0% 50%, rgba(231,29,54,.10), transparent);
 }
-.summary-grid .summary-col {
-  --summary-col-bg: rgba(255,255,255,0.03);
-  --summary-col-border: rgba(255,255,255,0.05);
-  position:relative;
-}
-.summary-grid .summary-col .summary-col-inner {
-  position:relative;
-  z-index:0;
-  display:flex;
-  flex-direction:column;
-  align-items:flex-start;
-  gap:6px;
-  padding:10px 12px;
-  border-radius:14px;
-  background:var(--summary-col-bg);
-  border:1px solid var(--summary-col-border);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
-  transition:border-color .25s ease, box-shadow .25s ease, background-color .25s ease;
-}
-.summary-grid tbody .summary-col .summary-col-inner {
-  min-height:44px;
-  justify-content:center;
-}
-.summary-grid .summary-col .summary-col-inner::after {
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:inherit;
-  background:transparent;
-  opacity:0;
-  pointer-events:none;
-  transition:opacity .25s ease;
-}
-.summary-grid .summary-col.best .summary-col-inner::after {
-  background:radial-gradient(600px 80px at 0% 50%, rgba(231,29,54,.12), transparent);
-  opacity:1;
-}
-.summary-grid .summary-col.dim .summary-col-inner {
+.summary-grid .dim {
   color:#6b7686;
-}
-.summary-grid .summary-col[data-rank="1"] .summary-col-inner {
-  border-color:rgba(100,210,255,0.5);
-  box-shadow:0 0 22px rgba(100,210,255,0.24), inset 0 0 0 1px rgba(100,210,255,0.35);
-}
-.summary-grid thead .summary-col[data-rank="1"] .summary-col-inner {
-  box-shadow:0 0 26px rgba(100,210,255,0.26), inset 0 0 0 1px rgba(100,210,255,0.45);
-}
-.summary-grid [data-col="0"],
-.summary-grid [data-col="5"],
-.summary-grid [data-col="10"] {
-  --summary-col-bg: rgba(100,210,255,0.08);
-  --summary-col-border: rgba(100,210,255,0.24);
-}
-.summary-grid [data-col="1"],
-.summary-grid [data-col="6"],
-.summary-grid [data-col="11"] {
-  --summary-col-bg: rgba(166,105,255,0.10);
-  --summary-col-border: rgba(166,105,255,0.28);
-}
-.summary-grid [data-col="2"],
-.summary-grid [data-col="7"],
-.summary-grid [data-col="12"] {
-  --summary-col-bg: rgba(46,213,115,0.10);
-  --summary-col-border: rgba(46,213,115,0.26);
-}
-.summary-grid [data-col="3"],
-.summary-grid [data-col="8"],
-.summary-grid [data-col="13"] {
-  --summary-col-bg: rgba(255,159,67,0.08);
-  --summary-col-border: rgba(255,159,67,0.24);
-}
-.summary-grid [data-col="4"],
-.summary-grid [data-col="9"],
-.summary-grid [data-col="14"] {
-  --summary-col-bg: rgba(255,107,129,0.10);
-  --summary-col-border: rgba(255,107,129,0.28);
 }
 .summary-grid .chip {
   display:inline-block;
@@ -3643,6 +3570,64 @@ td[data-unit][title] {
   font-size:12px;
 }
 
+.comparison-summary {
+  position:relative;
+}
+
+.comparison-summary .summary-wrap {
+  position:relative;
+}
+
+/* keep sticky label clean while column underlays sit beneath */
+.comparison-summary .summary-grid thead th.col-card {
+  background:transparent;
+}
+
+/* remove the legacy vertical accent rail within the Summary scope */
+/* previously emitted via .summary-grid tbody td.metric-col::before and row box-shadows */
+.comparison-summary .summary-grid th,
+.comparison-summary .summary-grid td {
+  box-shadow:none !important;
+  border-left:none !important;
+}
+.comparison-summary .summary-grid th::before,
+.comparison-summary .summary-grid td::before {
+  content:none !important;
+}
+
+.comparison-summary .summary-col-underlays {
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+}
+
+.comparison-summary .summary-col-bg {
+  position:absolute;
+  top:0;
+  left:0;
+  width:0;
+  height:0;
+  border-radius:12px;
+  background:rgba(255,255,255,0.04);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.05) inset,
+    0 10px 28px rgba(0,0,0,0.28);
+  transition:box-shadow .25s ease, background .25s ease;
+}
+
+.comparison-summary .summary-col-bg.is-leader {
+  box-shadow:
+    0 0 0 1px rgba(231,29,54,0.35) inset,
+    0 12px 32px rgba(231,29,54,0.25);
+  background:rgba(231,29,54,0.08);
+}
+
+.comparison-summary .section-header-bar {
+  position:relative;
+  z-index:1;
+}
+
 .comparison-summary .summary-grid .group-row td {
   padding:0;
   border-bottom:none;
@@ -3654,9 +3639,9 @@ td[data-unit][title] {
 }
 
 /*
- * Note: the previous vertical accent was applied via a border-left on
- * .summary-grid .best and the sticky label pseudo-element.
- * Column containers now handle the glow/overlay via .summary-col-inner::after.
+ * Note: the previous vertical accent was applied via
+ * css/styles.css -> .summary-grid .best { border-left: 2px solid ... }
+ * and the sticky label pseudo-element .summary-grid tbody td.metric-col::before.
  * The header styling below mirrors the Rent Schedule grand total row
  * (css/styles.css -> .row-grandtotal) for color and borders.
  */
