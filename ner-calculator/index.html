@@ -1189,13 +1189,13 @@
   <!-- One segmented control for all three views -->
 <!-- View toggle -->
 <div id="resultsViewToggle" class="view-pills">
-  <button class="btn-pill active" data-view="schedule">Rent Schedule</button>
-  <button class="btn-pill" data-view="compare">Lease Comparison</button>
-  <button class="btn-pill" data-view="charts">Charts</button>
+  <button id="tabRentSchedule" class="btn-pill active" data-view="schedule">Rent Schedule</button>
+  <button id="tabLeaseComparison" class="btn-pill" data-view="compare">Lease Comparison</button>
+  <button id="tabCharts" class="btn-pill" data-view="charts">Charts</button>
 
 </div>
 
-    <div class="cards">
+    <div id="kpiResults" class="cards">
       <!-- Row 1 -->
       <div class="card">
         <div class="card-label">Lease Starts</div>
@@ -1205,7 +1205,7 @@
       <div class="card">
         <div class="card-label">Lease Ends</div>
         <div class="card-value" id="leaseEnd">&mdash;</div>
-        <span id="termChip" class="chip term-chip" aria-live="polite"></span>
+        <div id="termChip" class="chips term-chip" aria-live="polite"></div>
       </div>
 
       <div class="card">
@@ -1289,21 +1289,57 @@
     </div>
 
 <section id="compareSection" class="compare-section hidden">
-  <div class="compare-header">
-    <!-- Give the title an id so we can set "Scenario Comparison (1—N)" -->
-    <h3 id="scenarioCompareTitle" class="section-title">Scenario Comparison (1—3)</h3>
+  <div id="compareToggle"
+       class="mt-4 flex w-full items-center gap-2"
+       role="tablist" aria-label="Comparison view toggle">
+    <button id="btnComparisonSummary"
+            class="toggle-btn active"
+            role="tab"
+            aria-selected="true"
+            aria-controls="comparisonSummary"
+            type="button">
+      Comparison Summary
+    </button>
+    <button id="btnCashFlowComparison"
+            class="toggle-btn"
+            role="tab"
+            aria-selected="false"
+            aria-controls="cashFlowComparison"
+            type="button">
+      Cash Flow Comparison
+    </button>
+  </div>
 
-    <div class="count-ctrl">
+  <div class="compare-controls">
+    <label class="toggle hidden" id="hiddenRowsToggleWrap">
+      <input type="checkbox" id="toggleHiddenRows" />
+      <span>Show hidden rows</span>
+    </label>
+
+    <div class="count-ctrl compareCount">
       <label for="compareCount">Compare</label>
       <!-- Let JS populate 1..10 to avoid mismatched markup -->
       <select id="compareCount"></select>
     </div>
   </div>
 
-  <div id="compareGrid" class="compare-grid"></div>
+  <section id="comparisonSummary" class="toggle-panel comparison-summary">
+    <!-- Comparison Summary renders here -->
+  </section>
 
-  <!-- Annual rent cash-flow compare (renders when ≥1 scenarios are pinned) -->
-  <div id="cashflowCompare" class="cf-compare" style="margin-top:18px;"></div>
+  <section id="cashFlowComparison" class="toggle-panel hidden">
+    <div class="compare-header">
+      <!-- Give the title an id so we can set "Scenario Comparison (1—N)" -->
+      <h3 id="scenarioCompareTitle" class="section-title">Cash Flow Comparison (1—3)</h3>
+    </div>
+
+    <div id="compareGrid" class="compare-grid"></div>
+
+    <!-- existing Cash Flow Comparison markup lives here -->
+
+    <!-- Annual rent cash-flow compare (renders when ≥1 scenarios are pinned) -->
+    <div id="cashflowCompare" class="cf-compare" style="margin-top:18px;"></div>
+  </section>
 </section>
 
 
