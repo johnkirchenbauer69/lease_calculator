@@ -1310,6 +1310,14 @@
     </button>
   </div>
 
+  <div class="compare-controls">
+    <div class="count-ctrl compareCount">
+      <label for="compareCount">Compare</label>
+      <!-- Let JS populate 1..10 to avoid mismatched markup -->
+      <select id="compareCount"></select>
+    </div>
+  </div>
+
   <section id="comparisonSummary" class="toggle-panel comparison-summary">
     <!-- Comparison Summary renders here -->
   </section>
@@ -1319,18 +1327,10 @@
       <!-- Give the title an id so we can set "Scenario Comparison (1—N)" -->
       <h3 id="scenarioCompareTitle" class="section-title">Cash Flow Comparison (1—3)</h3>
 
-      <div class="compare-controls">
-        <label class="toggle hidden" id="hiddenRowsToggleWrap">
-          <input type="checkbox" id="toggleHiddenRows" />
-          <span>Show hidden rows</span>
-        </label>
-
-        <div class="count-ctrl compareCount">
-          <label for="compareCount">Compare</label>
-          <!-- Let JS populate 1..10 to avoid mismatched markup -->
-          <select id="compareCount"></select>
-        </div>
-      </div>
+      <label class="toggle hidden" id="hiddenRowsToggleWrap">
+        <input type="checkbox" id="toggleHiddenRows" />
+        <span>Show hidden rows</span>
+      </label>
     </div>
 
     <div id="compareGrid" class="compare-grid"></div>
