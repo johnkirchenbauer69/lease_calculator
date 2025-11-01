@@ -2420,6 +2420,16 @@ body {
     text-align: right;
 }
 
+.subtotal-toggle .chevron {
+    display: inline-block;
+    transition: transform .18s ease;
+    transform: rotate(0deg);
+}
+
+.subtotal-toggle.expanded .chevron {
+    transform: rotate(180deg);
+}
+
 .cf-mini tfoot td {
     padding: 10px 12px;
     border-top: 1px solid var(--border-1);
@@ -3300,19 +3310,17 @@ body {
     position: relative;
 }
 
-/* ensures the chip can anchor inside */
-.kpi .chip.term-chip {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    padding: 2px 8px;
-    border-radius: 999px;
+.term-chip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.term-chip .chip {
     font-size: 12px;
     line-height: 1.2;
-    background: var(--panel-3, #2b2b2b);
-    border: 1px solid var(--stroke, #3a3a3a);
-    color: var(--text, #eaeaea);
-    opacity: .95;
+    padding: 2px 8px;
 }
 
 th .hdr-note {
@@ -3392,4 +3400,403 @@ th .hdr-note {
     height: 42px;
     display: block;
     filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .35));
+}
+
+.show-hidden-toggle {
+  display: inline-flex;
+  gap: .5rem;
+  align-items: center;
+  margin-left: .75rem;
+  opacity: .85;
+}
+
+.pill {
+  font-size: .7rem;
+  padding: .15rem .4rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.pill-muted {
+  opacity: .9;
+}
+
+td[data-unit] {
+  position: relative;
+}
+
+td[data-unit][title] {
+  cursor: help;
+}
+
+/* Toggle container buttons */
+.toggle-btn {
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border, #2a2a2a);
+  background: var(--surface, #111);
+  color: var(--text, #eaeaea);
+  font-weight: 600;
+}
+
+.toggle-btn.active {
+  background: var(--accent, #b30000);
+  border-color: var(--accent, #b30000);
+  color: #fff;
+}
+
+/* Panels share common class; 'hidden' controls visibility */
+.toggle-panel.hidden { display: none !important; }
+
+.compare-toggle {
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+  margin:16px 0 8px;
+}
+.chip.chip-tab {
+  padding:6px 10px;
+  border-radius:12px;
+  border:1px solid var(--border, #2b2f36);
+  background:#15181d;
+  color:#dfe6ef;
+  font-weight:600;
+  cursor:pointer;
+}
+.chip.chip-active {
+  border-color: var(--accent, #e71d36);
+  box-shadow: 0 0 0 1px rgba(231,29,54,.35) inset;
+}
+.compare-toggle .spacer {
+  flex:1 1 auto;
+}
+.compare-panel {
+  width:100%;
+}
+.compare-controls {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:12px 0 8px;
+  width:100%;
+}
+.compare-controls .compareCount {
+  order:2;
+}
+.compare-controls #hiddenRowsToggleWrap {
+  order:1;
+}
+.compare-section {
+  max-width:1600px;
+  margin:0 auto;
+  width:100%;
+  padding:0 24px 24px;
+  overflow-x:hidden;
+}
+.comparison-summary {
+  position:relative;
+  --summary-label-width:260px;
+  --summary-card-width:360px;
+  --summary-card-height:232px;
+  overflow-x:hidden;
+}
+
+.comparison-summary .summary-wrap {
+  position:relative;
+  width:100%;
+  overflow-x:hidden;
+}
+#comparisonSummary {
+  width:100%;
+  overflow-x:hidden;
+}
+.panel-results {
+  overflow-x:hidden;
+}
+
+.summary-grid {
+  display:block;
+  overflow-x:auto;
+  overflow-y:hidden;
+  border-radius:12px;
+  background:#0e1116;
+  border:1px solid #1f232a;
+  position:relative;
+  z-index:1;
+  contain:content;
+  scrollbar-gutter:stable both-edges;
+  max-width:100%;
+  width:min(100%, calc(var(--summary-label-width) + 3 * var(--summary-card-width)));
+  margin:0 auto;
+}
+.summary-grid:focus {
+  outline:2px solid var(--accent, #e71d36);
+  outline-offset:4px;
+}
+.summary-grid table {
+  border-collapse:separate;
+  border-spacing:0;
+  width:max-content;
+  min-width:calc(var(--summary-label-width) + 3 * var(--summary-card-width));
+  table-layout:fixed;
+}
+.summary-grid th,
+.summary-grid td {
+  padding:12px 14px;
+  border-bottom:1px solid #1a1e25;
+  white-space:nowrap;
+  vertical-align:middle;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.summary-grid thead th {
+  position:sticky;
+  top:0;
+  background:#0e1116;
+  z-index:4;
+  box-shadow: 0 1px 0 #1a1e25;
+}
+.summary-grid thead th.metric-col {
+  padding-top:16px;
+  padding-bottom:16px;
+}
+.summary-grid .metric-col {
+  position:sticky;
+  left:0;
+  background:#0e1116;
+  z-index:3;
+  width:var(--summary-label-width);
+  min-width:var(--summary-label-width);
+  max-width:var(--summary-label-width);
+  font-weight:700;
+}
+.summary-grid tbody td.metric-col {
+  position:sticky;
+  left:0;
+  background:#0e1116;
+}
+.summary-grid .group-row {
+  background:transparent;
+}
+.summary-grid .col-card,
+.summary-grid tbody td:not(.metric-col) {
+  width:var(--summary-card-width);
+  min-width:var(--summary-card-width);
+  max-width:var(--summary-card-width);
+}
+.summary-grid thead th.col-card {
+  padding:0;
+  vertical-align:top;
+}
+.summary-grid .summary-card {
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  height:var(--summary-card-height);
+  padding:14px;
+  border-radius:12px;
+  background:#141922;
+  border:1px solid #1f232a;
+  overflow:hidden;
+  justify-content:space-between;
+}
+.summary-grid .summary-card-photo {
+  position:relative;
+  width:100%;
+  flex:0 0 120px;
+  border-radius:10px;
+  overflow:hidden;
+  background:#0d1118;
+}
+.summary-grid .summary-card-photo.placeholder {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#5d6776;
+  font-size:12px;
+  letter-spacing:.3px;
+  text-transform:uppercase;
+}
+.summary-grid .summary-card-photo .photo-placeholder {
+  opacity:0.75;
+}
+.summary-grid .summary-card-photo img {
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.summary-grid .summary-card-title {
+  font-weight:700;
+  font-size:15px;
+  line-height:1.2;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.summary-grid .summary-card-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-content:flex-start;
+  overflow:hidden;
+  max-height:48px;
+}
+.summary-grid .summary-term-cell {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-width:0;
+}
+.summary-grid .summary-term-value {
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+.summary-grid .summary-term-range {
+  display:inline-flex;
+  align-items:center;
+  flex:0 1 auto;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.summary-grid .summary-card-chips .chip {
+  margin:0;
+}
+.summary-grid .best {
+  background: radial-gradient(600px 80px at 0% 50%, rgba(231,29,54,.10), transparent);
+}
+.summary-grid .dim {
+  color:#6b7686;
+}
+.summary-grid .chip {
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:12px;
+  background:#1a1e25;
+  color:#cbd5e1;
+  border:1px solid #232832;
+}
+.summary-grid .chip.red {
+  border-color:#e71d36;
+  color:#ffdfe4;
+}
+.summary-grid .photo {
+  width:100%;
+  height:120px;
+  object-fit:cover;
+  border-radius:10px;
+  border:1px solid #1f232a;
+}
+.summary-grid .sortable {
+  cursor:pointer;
+}
+.summary-grid .sortable:hover {
+  color:#fff;
+}
+.summary-grid .note {
+  opacity:.75;
+  font-size:12px;
+}
+
+/* keep sticky label clean while column underlays sit beneath */
+.comparison-summary .summary-grid thead th.col-card {
+  background:transparent;
+}
+
+/* remove the legacy vertical accent rail within the Summary scope */
+/* previously emitted via .summary-grid tbody td.metric-col::before and row box-shadows */
+.comparison-summary .summary-grid th,
+.comparison-summary .summary-grid td {
+  box-shadow:none !important;
+  border-left:none !important;
+}
+.comparison-summary .summary-grid th::before,
+.comparison-summary .summary-grid td::before {
+  content:none !important;
+}
+
+.comparison-summary .summary-col-underlays {
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+}
+
+.comparison-summary .summary-col-bg {
+  position:absolute;
+  top:0;
+  left:0;
+  width:0;
+  height:0;
+  border-radius:12px;
+  background:rgba(255,255,255,0.035);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.05) inset,
+    0 10px 28px rgba(0,0,0,0.28);
+  transition:box-shadow .25s ease, background .25s ease;
+}
+
+.comparison-summary .summary-col-bg.is-leader {
+  box-shadow:
+    0 0 0 1px rgba(231,29,54,0.35) inset,
+    0 12px 32px rgba(231,29,54,0.25);
+  background:rgba(231,29,54,0.08);
+}
+
+.comparison-summary .section-header-bar {
+  position:relative;
+  z-index:1;
+}
+
+.comparison-summary .summary-grid .group-row td {
+  padding:0;
+  border-bottom:none;
+  background:transparent;
+}
+
+.comparison-summary .summary-grid tbody td.metric-col::before {
+  content:none !important;
+}
+
+/*
+ * Note: the previous vertical accent was applied via
+ * css/styles.css -> .summary-grid .best { border-left: 2px solid ... }
+ * and the sticky label pseudo-element .summary-grid tbody td.metric-col::before.
+ * The header styling below mirrors the Rent Schedule grand total row
+ * (css/styles.css -> .row-grandtotal) for color and borders.
+ */
+.comparison-summary .section-header-bar {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:10px 12px;
+  margin:12px 0 8px;
+  border-radius:6px;
+  border-top:2px solid var(--accent, #0a84ff);
+  border-bottom:2px solid var(--accent, #0a84ff);
+  background:color-mix(in srgb, var(--accent, #0a84ff) 16%, transparent);
+  color:#ffffff;
+  font-weight:700;
+  text-align:center;
+}
+
+.comparison-summary .section-header-bar:first-child {
+  margin-top:0;
+}
+
+.comparison-summary .section-header-label {
+  display:inline-block;
+  letter-spacing:.2px;
+}
+
+.comparison-summary .summary-grid .group-row:first-of-type .section-header-bar {
+  margin-top:0;
 }
