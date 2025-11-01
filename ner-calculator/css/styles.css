@@ -3593,6 +3593,18 @@ td[data-unit][title] {
   object-fit:cover;
   border-radius:10px;
   border:1px solid #1f232a;
+  flex-shrink:0;
+}
+.summary-grid .summary-card-title {
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.summary-grid .summary-card-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:2px;
 }
 .summary-grid .sortable {
   cursor:pointer;
