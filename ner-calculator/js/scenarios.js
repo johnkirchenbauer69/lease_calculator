@@ -1390,8 +1390,9 @@ function renderCompareGrid() {
       });
     });
 
+    const colCount = entries.length;
     return `
-      <div class="summary-grid">
+      <div class="summary-grid" style="--summary-col-count:${colCount};">
         <table>
           <thead>
             <tr>
@@ -1416,14 +1417,14 @@ function renderCompareGrid() {
     });
   }
 
-  function ensureUnderlayHost(grid) {
-    if (!grid) return null;
-    let host = grid.querySelector('.summary-col-underlays');
+  function ensureUnderlayHost(viewport) {
+    if (!viewport) return null;
+    let host = viewport.querySelector('.summary-col-underlays');
     if (!host) {
       host = document.createElement('div');
       host.className = 'summary-col-underlays';
-      // host sits under the scrollable table so column backgrounds remain in one layer
-      grid.insertAdjacentElement('afterbegin', host);
+      // host sits within the scrolling viewport so column backgrounds remain in one layer
+      viewport.insertAdjacentElement('afterbegin', host);
     }
     return host;
   }
@@ -1432,9 +1433,10 @@ function renderCompareGrid() {
     const mount = document.getElementById('comparisonSummary');
     if (!mount) return;
     const wrap = mount.querySelector('.summary-wrap');
-    const grid = wrap?.querySelector('.summary-grid');
+    const viewport = wrap?.querySelector('.summary-viewport');
+    const grid = viewport?.querySelector('.summary-grid');
     const table = grid?.querySelector('table');
-    if (!wrap || !grid || !table) return;
+    if (!wrap || !viewport || !grid || !table) return;
 
     const headers = table.querySelectorAll('thead th.col-card');
     if (!headers.length) return;
@@ -1443,12 +1445,12 @@ function renderCompareGrid() {
     const rows = dataRows.length ? dataRows : Array.from(table.querySelectorAll('tbody tr'));
     if (!rows.length) return;
 
-    const host = ensureUnderlayHost(grid);
+    const host = ensureUnderlayHost(viewport);
     if (!host) return;
 
-    const gridRect = grid.getBoundingClientRect();
-    const scrollLeft = grid.scrollLeft;
-    const scrollTop = grid.scrollTop;
+    const gridRect = viewport.getBoundingClientRect();
+    const scrollLeft = viewport.scrollLeft;
+    const scrollTop = viewport.scrollTop;
 
     const headerRect = headers[0].getBoundingClientRect();
     const firstRect = rows[0].getBoundingClientRect();
@@ -1489,7 +1491,7 @@ function renderCompareGrid() {
 
     const models = _getCompareModels();
     if (!models.length) {
-      mount.innerHTML = '<div class="summary-wrap"><div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div></div>';
+      mount.innerHTML = '<div class="summary-wrap"><div class="summary-viewport"><div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div></div></div>';
       return;
     }
 
@@ -1515,7 +1517,7 @@ function renderCompareGrid() {
     }
 
     const html = buildSummaryTable(ordered, { showHidden, perspective });
-    mount.innerHTML = `<div class="summary-wrap">${html}</div>`;
+    mount.innerHTML = `<div class="summary-wrap"><div class="summary-viewport">${html}</div></div>`;
 
     mount.querySelectorAll('.metric-col.sortable').forEach(el => {
       el.addEventListener('click', () => {
@@ -1534,9 +1536,9 @@ function renderCompareGrid() {
       });
     });
 
-    const grid = mount.querySelector('.summary-grid');
-    if (grid) {
-      grid.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
+    const viewport = mount.querySelector('.summary-viewport');
+    if (viewport) {
+      viewport.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
     }
 
     scheduleSummaryUnderlayUpdate();
