@@ -1474,6 +1474,16 @@ function renderCompareGrid() {
     const gridRect = grid.getBoundingClientRect();
     const scrollLeft = grid.scrollLeft;
     const scrollTop = grid.scrollTop;
+    const scrollWidth = grid.scrollWidth;
+    const scrollHeight = grid.scrollHeight;
+
+    host.style.left = '0px';
+    host.style.top = '0px';
+    host.style.right = 'auto';
+    host.style.bottom = 'auto';
+    host.style.width = `${scrollWidth}px`;
+    host.style.height = `${scrollHeight}px`;
+    host.style.transform = `translateX(${-scrollLeft}px)`;
 
     const headerRect = headers[0].getBoundingClientRect();
     const firstRect = rows[0].getBoundingClientRect();

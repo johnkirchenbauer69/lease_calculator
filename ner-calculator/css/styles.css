@@ -3511,6 +3511,7 @@ td[data-unit][title] {
   display:block;
   overflow-x:auto;
   overflow-y:hidden;
+  contain:content;
   border-radius:12px;
   background:#0e1116;
   border:1px solid #1f232a;
