@@ -1455,26 +1455,33 @@ function renderCompareGrid() {
 
   function configureSummaryViewport(grid, columnCount) {
     if (!grid) return;
-    const wrap = grid.parentElement;
-    if (!wrap) return;
 
     const computed = getComputedStyle(grid);
-    const labelWidth = parseFloat(computed.getPropertyValue('--summary-label-width')) || 260;
-    const visible = Math.max(1, Math.min(columnCount, 3));
-    const wrapWidth = wrap.clientWidth || 0;
-    const chrome = Math.max(0, grid.offsetWidth - grid.clientWidth);
-    const inner = Math.max(0, wrapWidth - chrome);
-    if (!inner || inner <= labelWidth) {
-      grid.style.setProperty('--summary-card-width', `${SUMMARY_CARD_WIDTH_MIN}px`);
-      grid.style.setProperty('--summary-visible-count', String(visible));
-      return;
-    }
+    const parseSize = (value, fallback = 0) => {
+      const num = Number.parseFloat(value);
+      return Number.isFinite(num) ? num : fallback;
+    };
 
-    const rawWidth = (inner - labelWidth) / visible;
-    const snapped = Math.floor(rawWidth);
-    const cardWidth = Math.max(SUMMARY_CARD_WIDTH_MIN, Math.min(SUMMARY_CARD_WIDTH_MAX, snapped));
+    let contentWidth = grid.clientWidth || 0;
+    contentWidth -= parseSize(computed.paddingLeft);
+    contentWidth -= parseSize(computed.paddingRight);
+    contentWidth -= parseSize(computed.borderLeftWidth);
+    contentWidth -= parseSize(computed.borderRightWidth);
+    contentWidth -= Math.max(0, grid.offsetWidth - grid.clientWidth);
+    contentWidth = Math.max(0, contentWidth);
+
+    const labelWidth = parseSize(computed.getPropertyValue('--summary-label-width'), 260);
+    const visible = Math.max(1, Math.min(columnCount, 3));
+    const usable = Math.max(0, contentWidth - labelWidth);
+    const rawWidth = visible ? Math.floor(usable / visible) : SUMMARY_CARD_WIDTH_MIN;
+    const cardWidth = Math.max(
+      SUMMARY_CARD_WIDTH_MIN,
+      Math.min(SUMMARY_CARD_WIDTH_MAX, rawWidth)
+    );
+
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
     grid.style.setProperty('--summary-visible-count', String(visible));
+    scheduleSummaryUnderlayUpdate();
   }
 
   function updateSummaryUnderlays() {
