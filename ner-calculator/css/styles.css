@@ -3486,13 +3486,16 @@ td[data-unit][title] {
   order:1;
 }
 .summary-grid {
-  display:inline-block;
+  display:block;
   width:100%;
+  max-width:100%;
   border-radius:12px;
   background:#0e1116;
   border:1px solid #1f232a;
   position:relative;
   z-index:1;
+  overflow-x:auto;
+  overflow-y:hidden;
 }
 .comparison-summary {
   --summary-label-width:260px;
@@ -3537,6 +3540,8 @@ td[data-unit][title] {
   background:#0e1116;
   z-index:3;
   width:260px;
+  max-width:260px;
+  flex:0 0 260px;
   font-weight:700;
 }
 .summary-grid tbody td.metric-col {
@@ -3549,13 +3554,19 @@ td[data-unit][title] {
 }
 .summary-grid .col-card {
   width:420px;
+  max-width:420px;
+  flex:0 0 420px;
 }
 .summary-grid tbody td:not(.metric-col) {
   width:420px;
+  max-width:420px;
+  flex:0 0 420px;
 }
 .comparison-summary .summary-grid th:not(.metric-col),
 .comparison-summary .summary-grid td:not(.metric-col) {
   width:420px;
+  max-width:420px;
+  flex:0 0 420px;
 }
 .summary-grid .best {
   background: radial-gradient(600px 80px at 0% 50%, rgba(231,29,54,.10), transparent);
