@@ -3510,12 +3510,12 @@ td[data-unit][title] {
 .summary-grid table {
   border-collapse:separate;
   border-spacing:0;
-  width:100%;
+  width:max-content;
   min-width:100%;
 }
 .comparison-summary .summary-grid table {
-  width:calc(var(--summary-label-width) + var(--summary-col-count, 0) * var(--summary-scenario-width));
-  min-width:100%;
+  width:max-content;
+  min-width:calc(var(--summary-label-width) + var(--summary-col-count, 0) * var(--summary-scenario-width));
   table-layout:fixed;
 }
 .summary-grid th,
