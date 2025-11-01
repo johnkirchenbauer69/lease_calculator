@@ -3489,8 +3489,6 @@ window.addEventListener('load', initMap);
         panelSummary: document.getElementById('comparisonSummary'),
         panelCash: document.getElementById('cashFlowComparison'),
         hiddenRowsWrap: document.getElementById('hiddenRowsToggleWrap'),
-        hiddenRowsHome: document.getElementById('hiddenRowsToggleHome'),
-        controlsBar: document.getElementById('compareControlsBar'),
         cashGrid: document.getElementById('compareGrid')
       };
 
@@ -3506,31 +3504,6 @@ window.addEventListener('load', initMap);
           els.panelCash.insertBefore(els.cashGrid, anchor);
         } else {
           els.panelCash.appendChild(els.cashGrid);
-        }
-      }
-
-      function syncHiddenRowsToggle(mode) {
-        const toggle = els.hiddenRowsWrap;
-        if (!toggle) return;
-        const sharedBar = els.controlsBar;
-        const compare = sharedBar?.querySelector('.compareCount');
-        const home = els.hiddenRowsHome;
-        const wantsCash = mode === 'cash';
-
-        if (wantsCash) {
-          if (sharedBar && compare) {
-            if (toggle.parentNode !== sharedBar) {
-              sharedBar.insertBefore(toggle, compare);
-            }
-          } else if (sharedBar && toggle.parentNode !== sharedBar) {
-            sharedBar.appendChild(toggle);
-          }
-          toggle.classList.remove('hidden');
-        } else {
-          toggle.classList.add('hidden');
-          if (home && toggle.parentNode !== home) {
-            home.appendChild(toggle);
-          }
         }
       }
 
@@ -3559,7 +3532,10 @@ window.addEventListener('load', initMap);
         const isSummary = mode === 'summary';
         els.panelSummary?.classList.toggle('hidden', !isSummary);
         els.panelCash?.classList.toggle('hidden', isSummary);
-        syncHiddenRowsToggle(mode);
+        if (els.hiddenRowsWrap) {
+          if (isSummary) els.hiddenRowsWrap.classList.add('hidden');
+          else els.hiddenRowsWrap.classList.remove('hidden');
+        }
         if (els.cashGrid && !els.panelCash?.contains(els.cashGrid)) {
           els.cashGrid.classList.toggle('hidden', isSummary);
         }

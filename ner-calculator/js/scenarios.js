@@ -1115,11 +1115,16 @@ function renderCompareGrid() {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+  const stripTags = (str = '') => String(str).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   const chip = (txt, cls = '') => `<span class="chip ${cls}">${escapeHtml(txt)}</span>`;
   const photo = (url) => {
-    if (!url) return '';
-    const safe = escapeHtml(url);
-    return `<img class="photo" src="${safe}" alt="Scenario photo" onerror="this.style.display='none'">`;
+    const safeUrl = url ? escapeHtml(url) : '';
+    const img = safeUrl
+      ? `<img src="${safeUrl}" alt="Scenario photo" onerror="this.style.display='none'">`
+      : '';
+    const stateClass = safeUrl ? '' : ' placeholder';
+    const fallback = safeUrl ? '' : '<span class="photo-placeholder">No photo</span>';
+    return `<div class="summary-card-photo${stateClass}">${img || fallback}</div>`;
   };
 
   function formatPlacementText(raw) {
@@ -1331,16 +1336,27 @@ function renderCompareGrid() {
 
   function buildSummaryTable(entries, { showHidden = false, perspective }) {
     const theadCols = entries.map(({ kpi }) => {
-      const chips = [
-        chip(`Term ${_fmtInt(kpi.termMonths)} mo`),
-        chip(`${_fmtInt(kpi.freeMonths ?? 0)} mo free`),
-        kpi.freePlacement ? chip(formatPlacementText(kpi.freePlacement), kpi.freePlacement === 'outside' ? 'red' : '') : ''
-      ].filter(Boolean).join(' ');
+      const termValue = Number(kpi.termMonths);
+      const freeValue = Number(kpi.freeMonths);
+      const termChip = Number.isFinite(termValue) && termValue >= 0
+        ? chip(`Term ${_fmtInt(termValue)} mo`)
+        : '';
+      const freeChip = Number.isFinite(freeValue) && freeValue >= 0
+        ? chip(`${_fmtInt(freeValue)} mo free`)
+        : '';
+      const placementChip = kpi.freePlacement
+        ? chip(formatPlacementText(kpi.freePlacement), kpi.freePlacement === 'outside' ? 'red' : '')
+        : '';
+      const chipHtml = [termChip, freeChip, placementChip].filter(Boolean).join(' ');
+      const safeTitle = escapeHtml(kpi.title || 'Scenario');
+      const chipsTitle = chipHtml ? stripTags(chipHtml) : '';
       return `
         <th class="col-card">
-          ${photo(kpi.photoUrl)}
-          <div class="summary-card-title">${escapeHtml(kpi.title || '')}</div>
-          <div class="summary-card-chips">${chips}</div>
+          <div class="summary-card" role="group" aria-label="${safeTitle}">
+            ${photo(kpi.photoUrl)}
+            <div class="summary-card-title" title="${safeTitle}">${safeTitle}</div>
+            <div class="summary-card-chips"${chipsTitle ? ` title="${escapeHtml(chipsTitle)}"` : ''}>${chipHtml}</div>
+          </div>
         </th>`;
     }).join('');
 
@@ -1364,7 +1380,8 @@ function renderCompareGrid() {
         const better = resolveBetter(metric, perspective);
         const bestIdx = better === 'none' ? -1 : pickBest(rawVals, better);
         const sortableClass = metric.sortable === false ? '' : ' sortable';
-        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}">${metric.label}</td>`;
+        const labelTitle = escapeHtml(metric.label);
+        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}" title="${labelTitle}">${metric.label}</td>`;
         const cells = rawVals.map((val, idx) => {
           const ctx = entries[idx];
           const formatted = metric.fmt ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective }) : (val ?? '—');
@@ -1384,15 +1401,16 @@ function renderCompareGrid() {
           const hasDisplayValue = numericHasValue || textualHasValue;
           const bestClass = (idx === bestIdx && numericHasValue) ? 'best' : '';
           const dimClass = hasDisplayValue ? '' : 'dim';
-          return `<td class="${bestClass} ${dimClass}">${formatted}</td>`;
+          const cellTitle = stripTags(formatted);
+          const titleAttr = cellTitle ? ` title="${escapeHtml(cellTitle)}"` : '';
+          return `<td class="${bestClass} ${dimClass}"${titleAttr}>${formatted}</td>`;
         }).join('');
         tbodyHTML += `<tr data-row="${metric.key}">${labelCell}${cells}</tr>`;
       });
     });
 
-    const colCount = entries.length;
     return `
-      <div class="summary-grid" style="--summary-col-count:${colCount};">
+      <div class="summary-grid">
         <table>
           <thead>
             <tr>
@@ -1417,14 +1435,14 @@ function renderCompareGrid() {
     });
   }
 
-  function ensureUnderlayHost(viewport) {
-    if (!viewport) return null;
-    let host = viewport.querySelector('.summary-col-underlays');
+  function ensureUnderlayHost(grid) {
+    if (!grid) return null;
+    let host = grid.querySelector('.summary-col-underlays');
     if (!host) {
       host = document.createElement('div');
       host.className = 'summary-col-underlays';
-      // host sits within the scrolling viewport so column backgrounds remain in one layer
-      viewport.insertAdjacentElement('afterbegin', host);
+      // host sits under the scrollable table so column backgrounds remain in one layer
+      grid.insertAdjacentElement('afterbegin', host);
     }
     return host;
   }
@@ -1433,10 +1451,9 @@ function renderCompareGrid() {
     const mount = document.getElementById('comparisonSummary');
     if (!mount) return;
     const wrap = mount.querySelector('.summary-wrap');
-    const viewport = wrap?.querySelector('.summary-viewport');
-    const grid = viewport?.querySelector('.summary-grid');
+    const grid = wrap?.querySelector('.summary-grid');
     const table = grid?.querySelector('table');
-    if (!wrap || !viewport || !grid || !table) return;
+    if (!wrap || !grid || !table) return;
 
     const headers = table.querySelectorAll('thead th.col-card');
     if (!headers.length) return;
@@ -1445,12 +1462,12 @@ function renderCompareGrid() {
     const rows = dataRows.length ? dataRows : Array.from(table.querySelectorAll('tbody tr'));
     if (!rows.length) return;
 
-    const host = ensureUnderlayHost(viewport);
+    const host = ensureUnderlayHost(grid);
     if (!host) return;
 
-    const gridRect = viewport.getBoundingClientRect();
-    const scrollLeft = viewport.scrollLeft;
-    const scrollTop = viewport.scrollTop;
+    const gridRect = grid.getBoundingClientRect();
+    const scrollLeft = grid.scrollLeft;
+    const scrollTop = grid.scrollTop;
 
     const headerRect = headers[0].getBoundingClientRect();
     const firstRect = rows[0].getBoundingClientRect();
@@ -1491,7 +1508,7 @@ function renderCompareGrid() {
 
     const models = _getCompareModels();
     if (!models.length) {
-      mount.innerHTML = '<div class="summary-wrap"><div class="summary-viewport"><div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div></div></div>';
+      mount.innerHTML = '<div class="summary-wrap"><div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div></div>';
       return;
     }
 
@@ -1517,7 +1534,7 @@ function renderCompareGrid() {
     }
 
     const html = buildSummaryTable(ordered, { showHidden, perspective });
-    mount.innerHTML = `<div class="summary-wrap"><div class="summary-viewport">${html}</div></div>`;
+    mount.innerHTML = `<div class="summary-wrap">${html}</div>`;
 
     mount.querySelectorAll('.metric-col.sortable').forEach(el => {
       el.addEventListener('click', () => {
@@ -1536,9 +1553,14 @@ function renderCompareGrid() {
       });
     });
 
-    const viewport = mount.querySelector('.summary-viewport');
-    if (viewport) {
-      viewport.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
+    const grid = mount.querySelector('.summary-grid');
+    if (grid) {
+      if (!grid.hasAttribute('tabindex')) {
+        grid.setAttribute('tabindex', '0');
+        grid.setAttribute('role', 'region');
+        grid.setAttribute('aria-label', 'Comparison summary scroll area');
+      }
+      grid.addEventListener('scroll', scheduleSummaryUnderlayUpdate, { passive: true });
     }
 
     scheduleSummaryUnderlayUpdate();
