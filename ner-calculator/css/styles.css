@@ -3554,6 +3554,26 @@ td[data-unit][title] {
   width:var(--summary-scenario-width, 260px);
   min-width:var(--summary-scenario-width, 260px);
   max-width:var(--summary-scenario-width, 260px);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  max-height:220px;
+  padding-bottom:12px;
+}
+
+.summary-card-title {
+  margin-top:8px;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.summary-card-chips {
+  margin-top:6px;
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
 }
 .comparison-summary .summary-grid th:not(.metric-col),
 .comparison-summary .summary-grid td:not(.metric-col) {
