@@ -1338,9 +1338,11 @@ function renderCompareGrid() {
       ].filter(Boolean).join(' ');
       return `
         <th class="col-card">
-          ${photo(kpi.photoUrl)}
-          <div style="margin-top:8px;font-weight:700">${escapeHtml(kpi.title || '')}</div>
-          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+          <div class="summary-card-header">
+            ${photo(kpi.photoUrl)}
+            <div class="summary-card-title">${escapeHtml(kpi.title || '')}</div>
+            <div class="summary-card-chips">${chips}</div>
+          </div>
         </th>`;
     }).join('');
 
