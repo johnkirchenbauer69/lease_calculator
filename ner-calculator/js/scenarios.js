@@ -1458,16 +1458,23 @@ function renderCompareGrid() {
 
     const computed = getComputedStyle(grid);
     const parseSize = (value, fallback = 0) => {
+      if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
       const num = Number.parseFloat(value);
       return Number.isFinite(num) ? num : fallback;
     };
 
-    let contentWidth = grid.clientWidth || 0;
-    contentWidth -= parseSize(computed.paddingLeft);
-    contentWidth -= parseSize(computed.paddingRight);
-    contentWidth -= parseSize(computed.borderLeftWidth);
-    contentWidth -= parseSize(computed.borderRightWidth);
-    contentWidth -= Math.max(0, grid.offsetWidth - grid.clientWidth);
+    const paddingInline =
+      parseSize(computed.paddingInlineStart ?? computed.paddingLeft) +
+      parseSize(computed.paddingInlineEnd ?? computed.paddingRight);
+    const borderInline =
+      parseSize(computed.borderInlineStartWidth ?? computed.borderLeftWidth) +
+      parseSize(computed.borderInlineEndWidth ?? computed.borderRightWidth);
+    const scrollbarWidth = Math.max(0, grid.offsetWidth - grid.clientWidth);
+
+    let contentWidth = parseSize(grid.clientWidth, 0);
+    contentWidth -= paddingInline;
+    contentWidth -= borderInline;
+    contentWidth -= scrollbarWidth;
     contentWidth = Math.max(0, contentWidth);
 
     const labelWidth = parseSize(computed.getPropertyValue('--summary-label-width'), 260);
