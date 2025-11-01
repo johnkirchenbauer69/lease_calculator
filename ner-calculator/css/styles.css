@@ -3515,9 +3515,9 @@ td[data-unit][title] {
   border:1px solid #1f232a;
   position:relative;
   z-index:1;
-  max-width:100%;
-  width:min(100%, calc(var(--summary-label-width) + 3 * var(--summary-card-width)));
-  margin:0 auto;
+  width:100%;
+  margin:0;
+  padding-inline-end:max(0px, calc(100% - (var(--summary-label-width) + 3 * var(--summary-card-width))));
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
