@@ -3525,21 +3525,8 @@ td[data-unit][title] {
   left:0;
   background:#0e1116;
 }
-.summary-grid tbody td.metric-col::before {
-  content:'';
-  position:absolute;
-  left:0;
-  top:0;
-  bottom:0;
-  width:3px;
-  background:var(--brand-accent, #2d8cff);
-  border-radius:2px;
-}
 .summary-grid .group-row {
-  background:#0b0e13;
-  color:#9fb3c8;
-  font-weight:700;
-  border-top:1px solid #1f232a;
+  background:transparent;
 }
 .summary-grid .col-card {
   min-width:260px;
@@ -3580,4 +3567,46 @@ td[data-unit][title] {
 .summary-grid .note {
   opacity:.75;
   font-size:12px;
+}
+
+.comparison-summary .summary-grid .group-row td {
+  padding:0;
+  border-bottom:none;
+  background:transparent;
+}
+
+.comparison-summary .summary-grid tbody td.metric-col::before {
+  content:none !important;
+}
+
+.comparison-summary .cs-section-header {
+  position:relative;
+  padding:10px 14px;
+  margin:18px 0 8px;
+  border-radius:10px;
+  background:linear-gradient(90deg, rgba(22,88,255,.85) 0%, rgba(22,88,255,.65) 60%, rgba(22,88,255,.35) 100%);
+  box-shadow:0 6px 18px rgba(22, 88, 255, 0.35), inset 0 1px 0 rgba(255,255,255,0.08);
+  backdrop-filter:saturate(120%) blur(2px);
+}
+
+.comparison-summary .cs-section-header::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:10px;
+  box-shadow:0 0 22px rgba(22, 88, 255, 0.45);
+  pointer-events:none;
+}
+
+.comparison-summary .cs-section-badge {
+  display:inline-block;
+  font-weight:700;
+  color:#fff;
+  letter-spacing:.2px;
+  font-size:14px;
+  line-height:1;
+  padding:8px 12px;
+  border-radius:999px;
+  background:rgba(0,0,0,0.18);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
 }

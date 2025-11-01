@@ -1348,7 +1348,15 @@ function renderCompareGrid() {
     let tbodyHTML = '';
 
     groups.forEach(group => {
-      tbodyHTML += `<tr class="group-row"><td class="metric-col" colspan="${entries.length + 1}">${group}</td></tr>`;
+      const safeGroup = escapeHtml(group);
+      tbodyHTML += `
+        <tr class="group-row">
+          <td colspan="${entries.length + 1}">
+            <div class="cs-section-header" role="heading" aria-level="3">
+              <span class="cs-section-badge">${safeGroup}</span>
+            </div>
+          </td>
+        </tr>`;
       METRICS.filter(m => m.group === group).forEach(metric => {
         const rawVals = entries.map(entry => metric.calc({ kpi: entry.kpi, model: entry.model, perspective }));
         const hidden = shouldHideRow(rawVals);
