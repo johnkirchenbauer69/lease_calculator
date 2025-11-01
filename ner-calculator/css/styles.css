@@ -3652,6 +3652,15 @@ td[data-unit][title] {
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+.summary-grid .summary-term-range .chip {
+  display:inline-flex;
+  align-items:center;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
 .summary-grid .summary-card-chips .chip {
   margin:0;
 }

@@ -1211,7 +1211,7 @@ function renderCompareGrid() {
         if (hasRange) {
           const range = `${start} – ${end}`;
           const safeRange = escapeHtml(range);
-          rangeHtml = `<span class="chip summary-term-range" title="${safeRange}">${safeRange}</span>`;
+          rangeHtml = `<span class="summary-term-range"><span class="chip" title="${safeRange}">${safeRange}</span></span>`;
         }
         return `<span class="summary-term-cell"><span class="summary-term-value">${safeMonths}</span>${rangeHtml}</span>`;
       }
@@ -1384,7 +1384,10 @@ function renderCompareGrid() {
         const bestIdx = better === 'none' ? -1 : pickBest(rawVals, better);
         const sortableClass = metric.sortable === false ? '' : ' sortable';
         const labelTitle = escapeHtml(metric.label);
-        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}" title="${labelTitle}">${metric.label}</td>`;
+        const labelContent = metric.key === 'term'
+          ? `<span class="summary-term-cell"><span class="summary-term-value">${metric.label}</span></span>`
+          : metric.label;
+        const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}" title="${labelTitle}">${labelContent}</td>`;
         const cells = rawVals.map((val, idx) => {
           const ctx = entries[idx];
           const formatted = metric.fmt ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective }) : (val ?? '—');
