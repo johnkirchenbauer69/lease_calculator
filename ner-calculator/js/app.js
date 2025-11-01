@@ -3489,6 +3489,8 @@ window.addEventListener('load', initMap);
         panelSummary: document.getElementById('comparisonSummary'),
         panelCash: document.getElementById('cashFlowComparison'),
         hiddenRowsWrap: document.getElementById('hiddenRowsToggleWrap'),
+        hiddenRowsHome: document.getElementById('hiddenRowsToggleHome'),
+        controlsBar: document.getElementById('compareControlsBar'),
         cashGrid: document.getElementById('compareGrid')
       };
 
@@ -3507,26 +3509,30 @@ window.addEventListener('load', initMap);
         }
       }
 
-      (function moveHiddenRowsToggle() {
-        const root = document.getElementById('cashFlowComparison') || document.querySelector('#cashflowComparison');
-        if (!root) return;
-        const toggle = root.querySelector('#hiddenRowsToggleWrap');
-        const compare = root.querySelector('.compareCount');
-        if (!toggle || !compare) return;
-        let row = root.querySelector('.compare-controls');
-        if (!row) {
-          row = document.createElement('div');
-          row.className = 'compare-controls';
-          const parent = compare.parentNode;
-          if (parent) {
-            parent.insertBefore(row, compare);
-            row.appendChild(compare);
+      function syncHiddenRowsToggle(mode) {
+        const toggle = els.hiddenRowsWrap;
+        if (!toggle) return;
+        const sharedBar = els.controlsBar;
+        const compare = sharedBar?.querySelector('.compareCount');
+        const home = els.hiddenRowsHome;
+        const wantsCash = mode === 'cash';
+
+        if (wantsCash) {
+          if (sharedBar && compare) {
+            if (toggle.parentNode !== sharedBar) {
+              sharedBar.insertBefore(toggle, compare);
+            }
+          } else if (sharedBar && toggle.parentNode !== sharedBar) {
+            sharedBar.appendChild(toggle);
+          }
+          toggle.classList.remove('hidden');
+        } else {
+          toggle.classList.add('hidden');
+          if (home && toggle.parentNode !== home) {
+            home.appendChild(toggle);
           }
         }
-        if (row) {
-          row.insertBefore(toggle, compare);
-        }
-      })();
+      }
 
       function renderSummaryIfNeeded() {
         if (typeof window.renderComparisonSummary === 'function') {
@@ -3553,10 +3559,7 @@ window.addEventListener('load', initMap);
         const isSummary = mode === 'summary';
         els.panelSummary?.classList.toggle('hidden', !isSummary);
         els.panelCash?.classList.toggle('hidden', isSummary);
-        if (els.hiddenRowsWrap) {
-          if (isSummary) els.hiddenRowsWrap.classList.add('hidden');
-          else els.hiddenRowsWrap.classList.remove('hidden');
-        }
+        syncHiddenRowsToggle(mode);
         if (els.cashGrid && !els.panelCash?.contains(els.cashGrid)) {
           els.cashGrid.classList.toggle('hidden', isSummary);
         }
