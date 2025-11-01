@@ -3489,7 +3489,8 @@ window.addEventListener('load', initMap);
         panelSummary: document.getElementById('comparisonSummary'),
         panelCash: document.getElementById('cashFlowComparison'),
         hiddenRowsWrap: document.getElementById('hiddenRowsToggleWrap'),
-        cashGrid: document.getElementById('compareGrid')
+        cashGrid: document.getElementById('compareGrid'),
+        compareControls: document.querySelector('#compareSection .compare-controls')
       };
 
       if (!els.btnSummary || !els.btnCash || !els.panelSummary || !els.panelCash) {
@@ -3507,25 +3508,31 @@ window.addEventListener('load', initMap);
         }
       }
 
-      (function moveHiddenRowsToggle() {
-        const root = document.getElementById('cashFlowComparison') || document.querySelector('#cashflowComparison');
-        if (!root) return;
-        const toggle = root.querySelector('#hiddenRowsToggleWrap');
-        const compare = root.querySelector('.compareCount');
-        if (!toggle || !compare) return;
-        let row = root.querySelector('.compare-controls');
-        if (!row) {
-          row = document.createElement('div');
-          row.className = 'compare-controls';
-          const parent = compare.parentNode;
-          if (parent) {
-            parent.insertBefore(row, compare);
-            row.appendChild(compare);
+      const placeHiddenRowsToggle = (() => {
+        const controls = els.compareControls;
+        const compareCount = controls?.querySelector('.compareCount') || null;
+        const home = els.hiddenRowsWrap?.parentElement || null;
+
+        const ensureInControls = () => {
+          if (!controls || !els.hiddenRowsWrap || !compareCount) return;
+          if (els.hiddenRowsWrap.parentElement !== controls) {
+            controls.insertBefore(els.hiddenRowsWrap, compareCount);
+          } else if (els.hiddenRowsWrap.nextSibling !== compareCount) {
+            controls.insertBefore(els.hiddenRowsWrap, compareCount);
           }
-        }
-        if (row) {
-          row.insertBefore(toggle, compare);
-        }
+        };
+
+        const ensureAtHome = () => {
+          if (!home || !els.hiddenRowsWrap) return;
+          if (els.hiddenRowsWrap.parentElement !== home) {
+            home.appendChild(els.hiddenRowsWrap);
+          }
+        };
+
+        return (mode) => {
+          if (mode === 'cash') ensureInControls();
+          else ensureAtHome();
+        };
       })();
 
       function renderSummaryIfNeeded() {
@@ -3553,6 +3560,7 @@ window.addEventListener('load', initMap);
         const isSummary = mode === 'summary';
         els.panelSummary?.classList.toggle('hidden', !isSummary);
         els.panelCash?.classList.toggle('hidden', isSummary);
+        placeHiddenRowsToggle(isSummary ? 'summary' : 'cash');
         if (els.hiddenRowsWrap) {
           if (isSummary) els.hiddenRowsWrap.classList.add('hidden');
           else els.hiddenRowsWrap.classList.remove('hidden');

@@ -3482,8 +3482,8 @@ td[data-unit][title] {
 .compare-controls .compareCount {
   order:2;
 }
-.compare-controls #hiddenRowsToggleWrap {
-  order:1;
+.compare-header #hiddenRowsToggleWrap {
+  margin-left:auto;
 }
 .summary-grid {
   display:block;
