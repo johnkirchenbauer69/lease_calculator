@@ -3450,20 +3450,20 @@ td[data-unit][title] {
 .toggle-panel.hidden { display: none !important; }
 
 .compare-toolbar {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  flex-wrap:wrap;
-  margin:16px 0 8px;
-  width:100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0 12px;
+  width: 100%;
 }
 
 .compare-toggle {
-  display:flex;
-  align-items:center;
-  gap:.5rem;
-  margin:0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
 }
 .chip.chip-tab {
   padding:6px 10px;
