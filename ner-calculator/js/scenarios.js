@@ -1541,6 +1541,22 @@ function renderCompareGrid() {
       host.appendChild(bg);
     }
 
+    let leaderIdx = -1;
+    const sortState = window.__summarySort;
+    if (sortState?.metric) {
+      const metricRow = rows.find(row => row.dataset?.row === sortState.metric);
+      if (metricRow) {
+        const cells = Array.from(metricRow.querySelectorAll('td'));
+        const bestCell = cells.find(cell => cell.classList.contains('best'));
+        if (bestCell) {
+          const cellIdx = cells.indexOf(bestCell);
+          if (cellIdx > 0) {
+            leaderIdx = cellIdx - 1;
+          }
+        }
+      }
+    }
+
     Array.from(host.children).forEach((node, idx) => {
       const header = headers[idx];
       const rect = header.getBoundingClientRect();
@@ -1550,7 +1566,7 @@ function renderCompareGrid() {
       node.style.top = `${top}px`;
       node.style.width = `${width}px`;
       node.style.height = `${height}px`;
-      node.classList.toggle('is-leader', idx === 0);
+      node.classList.toggle('is-leader', idx === leaderIdx);
     });
   }
 
