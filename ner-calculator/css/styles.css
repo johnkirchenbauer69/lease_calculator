@@ -3456,7 +3456,8 @@ td[data-unit][title] {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin: 16px 0 12px;
+  margin: 16px calc(-1 * var(--panel-gutter, 24px)) 12px;
+  padding-inline: var(--panel-gutter, 24px);
   width: 100%;
 }
 
@@ -3544,8 +3545,10 @@ td[data-unit][title] {
   margin:0;
 }
 .comparison-summary .summary-grid {
-  margin-inline: calc(-1 * var(--panel-gutter, 24px));
-  padding-inline: var(--panel-gutter, 24px);
+  margin-left: calc(-1 * var(--panel-gutter, 24px));
+  margin-right: calc(-1 * var(--panel-gutter, 24px));
+  padding-left: var(--panel-gutter, 24px);
+  padding-right: var(--panel-gutter, 24px);
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
