@@ -3761,7 +3761,7 @@ td[data-unit][title] {
 }
 
 .comparison-summary .summary-col-bg.is-leader {
-  background:color-mix(in srgb, var(--lee-red, #E84D4D) 26%, transparent);
+  background:color-mix(in srgb, var(--accent, #0a84ff) 26%, transparent);
 }
 
 .comparison-summary .section-header-bar {
