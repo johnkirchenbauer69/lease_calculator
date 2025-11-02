@@ -3449,11 +3449,21 @@ td[data-unit][title] {
 /* Panels share common class; 'hidden' controls visibility */
 .toggle-panel.hidden { display: none !important; }
 
+.compare-toolbar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  flex-wrap:wrap;
+  margin:16px 0 8px;
+  width:100%;
+}
+
 .compare-toggle {
   display:flex;
   align-items:center;
   gap:.5rem;
-  margin:16px 0 8px;
+  margin:0;
 }
 .chip.chip-tab {
   padding:6px 10px;
@@ -3480,8 +3490,8 @@ td[data-unit][title] {
   justify-content:flex-end;
   gap:12px;
   flex-wrap:wrap;
-  margin:12px 0 8px;
-  width:100%;
+  margin:0;
+  margin-left:auto;
 }
 .compare-controls .compareCount {
   order:2;
