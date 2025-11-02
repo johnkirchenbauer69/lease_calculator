@@ -3749,17 +3749,17 @@ td[data-unit][title] {
   height:0;
   border-radius:12px;
   background:rgba(255,255,255,0.035);
-  border:none !important;
-  outline:none !important;
-  box-shadow:none !important;
+  border:none;
+  outline:none;
+  box-shadow:none;
   transition:background .25s ease;
 }
 
 .comparison-summary .summary-col-bg.is-leader {
-  background:rgba(231,29,54,0.12);
-  border:none !important;
-  outline:none !important;
-  box-shadow:none !important;
+  background:rgba(231,29,54,0.08);
+  border:none;
+  outline:none;
+  box-shadow:none;
 }
 
 .comparison-summary .section-header-bar {
