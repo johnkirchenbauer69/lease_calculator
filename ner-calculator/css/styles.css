@@ -2464,7 +2464,7 @@ body {
 /* === Results layout (rows) =============================================== */
 /* Make the whole Results panel a 2-column header grid */
 .panel-results {
-    --panel-gutter: clamp(16px, 3vw, 24px);
+    --panel-gutter: 24px;
     display: grid;
     grid-template-columns: 1fr auto;
     /* left: title, right: landlord/tenant */
@@ -2472,6 +2472,7 @@ body {
     align-items: center;
     margin-top: 28px;
     gap: 8px 12px;
+    padding-inline: var(--panel-gutter);
 }
 
 /* Row 1: Title (left) + Landlord/Tenant (right) */
@@ -3461,11 +3462,20 @@ td[data-unit][title] {
   width: 100%;
 }
 
-.compare-toggle {
+.compare-toolbar .left {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
   margin: 0;
+}
+
+.compare-toolbar .right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 .chip.chip-tab {
   padding:6px 10px;
@@ -3480,53 +3490,33 @@ td[data-unit][title] {
   border-color: var(--accent, #e71d36);
   box-shadow: 0 0 0 1px rgba(231,29,54,.35) inset;
 }
-.compare-toggle .spacer {
-  flex:1 1 auto;
-}
 .compare-panel {
   width:100%;
 }
-.compare-controls {
+.compare-toolbar .right label[for="compareCount"] {
   display:flex;
   align-items:center;
-  justify-content:flex-end;
-  gap:12px;
-  flex-wrap:wrap;
-  margin:0;
-  margin-left:auto;
-}
-.compare-controls .compareCount {
-  order:2;
-}
-.compare-controls #hiddenRowsToggleWrap {
-  order:1;
+  gap:8px;
 }
 .compare-section {
   max-width:1600px;
   margin:0 auto;
   width:100%;
   padding:0 var(--panel-gutter, 24px) 24px;
-  overflow-x:hidden;
 }
 .comparison-summary {
   position:relative;
   --summary-label-width:260px;
   --summary-card-width:360px;
   --summary-card-height:232px;
-  overflow-x:hidden;
 }
 
 .comparison-summary .summary-wrap {
   position:relative;
   width:100%;
-  overflow-x:hidden;
 }
 #comparisonSummary {
   width:100%;
-  overflow-x:hidden;
-}
-.panel-results {
-  overflow-x:hidden;
 }
 
 .summary-grid {
@@ -3540,15 +3530,16 @@ td[data-unit][title] {
   z-index:1;
   contain:content;
   scrollbar-gutter:stable both-edges;
-  max-width:100%;
   width:100%;
-  margin:0;
+  max-width:none;
+  margin-block:0;
+  box-sizing:border-box;
 }
 .comparison-summary .summary-grid {
-  margin-left: calc(-1 * var(--panel-gutter, 24px));
-  margin-right: calc(-1 * var(--panel-gutter, 24px));
-  padding-left: var(--panel-gutter, 24px);
-  padding-right: var(--panel-gutter, 24px);
+  margin-inline: calc(-1 * var(--panel-gutter));
+  padding-inline: var(--panel-gutter);
+  width:100%;
+  max-width:none;
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
@@ -3565,6 +3556,8 @@ td[data-unit][title] {
 .summary-grid td {
   padding:12px 14px;
   border-bottom:1px solid #1a1e25;
+  border-left:0;
+  border-right:0;
   white-space:nowrap;
   vertical-align:middle;
   overflow:hidden;
@@ -3749,19 +3742,19 @@ td[data-unit][title] {
   pointer-events:none;
 }
 
-.comparison-summary .summary-col-bg {
+.comparison-summary .summary-col-bg,
+.comparison-summary .summary-col-bg.is-leader {
   position:absolute;
   top:0;
   left:0;
   width:0;
   height:0;
   border-radius:12px;
-  background:rgba(255,255,255,0.04);
+  box-shadow:none !important;
+  border:0 !important;
+  outline:none !important;
+  background:rgba(255,255,255,0.035);
   transition:background .25s ease;
-}
-
-.comparison-summary .summary-col-bg.is-leader {
-  background:color-mix(in srgb, var(--accent, #0a84ff) 26%, transparent);
 }
 
 .comparison-summary .section-header-bar {
