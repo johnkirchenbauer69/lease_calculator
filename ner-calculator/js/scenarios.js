@@ -20,7 +20,7 @@ function isStaleModel(m) {
 
 function scenarioTitle(model, idx) {
   if (!model) return `Scenario ${idx + 1}`;
-  const candidates = [model.name, model.title, model.suite, model.propertyName, model.propertyLabel, model.address, model.propertyAddress];
+  const candidates = [model.name, model.title, model.address, model.propertyName, model.propertyLabel, model.address, model.propertyAddress];
   for (const cand of candidates) {
     if (typeof cand === 'string' && cand.trim()) return cand.trim();
   }
