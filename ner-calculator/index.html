@@ -1289,37 +1289,39 @@
     </div>
 
 <section id="compareSection" class="compare-section hidden">
-  <div id="compareToggle"
-       class="mt-4 flex w-full items-center gap-2"
-       role="tablist" aria-label="Comparison view toggle">
-    <button id="btnComparisonSummary"
-            class="toggle-btn active"
-            role="tab"
-            aria-selected="true"
-            aria-controls="comparisonSummary"
-            type="button">
-      Comparison Summary
-    </button>
-    <button id="btnCashFlowComparison"
-            class="toggle-btn"
-            role="tab"
-            aria-selected="false"
-            aria-controls="cashFlowComparison"
-            type="button">
-      Cash Flow Comparison
-    </button>
-  </div>
+  <div class="compare-toolbar">
+    <div id="compareToggle"
+         class="mt-4 flex items-center gap-2"
+         role="tablist" aria-label="Comparison view toggle">
+      <button id="btnComparisonSummary"
+              class="toggle-btn active"
+              role="tab"
+              aria-selected="true"
+              aria-controls="comparisonSummary"
+              type="button">
+        Comparison Summary
+      </button>
+      <button id="btnCashFlowComparison"
+              class="toggle-btn"
+              role="tab"
+              aria-selected="false"
+              aria-controls="cashFlowComparison"
+              type="button">
+        Cash Flow Comparison
+      </button>
+    </div>
 
-  <div class="compare-controls">
-    <label class="toggle hidden" id="hiddenRowsToggleWrap">
-      <input type="checkbox" id="toggleHiddenRows" />
-      <span>Show hidden rows</span>
-    </label>
+    <div class="compare-controls">
+      <label class="toggle hidden" id="hiddenRowsToggleWrap">
+        <input type="checkbox" id="toggleHiddenRows" />
+        <span>Show hidden rows</span>
+      </label>
 
-    <div class="count-ctrl compareCount">
-      <label for="compareCount">Compare</label>
-      <!-- Let JS populate 1..10 to avoid mismatched markup -->
-      <select id="compareCount"></select>
+      <div class="count-ctrl compareCount">
+        <label for="compareCount">Compare</label>
+        <!-- Let JS populate 1..10 to avoid mismatched markup -->
+        <select id="compareCount"></select>
+      </div>
     </div>
   </div>
 
