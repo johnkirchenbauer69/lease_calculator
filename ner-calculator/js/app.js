@@ -1189,43 +1189,149 @@ window.addEventListener('load', initMap);
       bootCapex();
     }  
   
+    const warnDuplicateIds = (() => {
+      let warned = false;
+      return () => {
+        if (warned) return;
+        warned = true;
+        const seen = new Set();
+        const dupes = new Set();
+        document.querySelectorAll('[id]').forEach(el => {
+          if (!el.id) return;
+          if (seen.has(el.id)) dupes.add(el.id);
+          else seen.add(el.id);
+        });
+        if (dupes.size) {
+          console.warn('[NER] Duplicate IDs detected:', Array.from(dupes).join(', '));
+        }
+      };
+    })();
+
+    function getServiceType() {
+      return (document.getElementById('serviceType')?.value || 'NNN').toString();
+    }
+
+    function qField(scope, field, fallbackId) {
+      const root = scope instanceof Element ? scope : null;
+      if (root) {
+        const scoped = root.querySelector(`[data-field="${field}"]`);
+        if (scoped) return scoped;
+      }
+      const globalField = document.querySelector(`[data-field="${field}"]`);
+      if (globalField) return globalField;
+      if (fallbackId) return document.getElementById(fallbackId);
+      return null;
+    }
+
+    function updateStopRowVisibility(row, kind, showStopControls) {
+      if (!row) return { stopType: null, showFixed: false };
+      const stopTypeSel = qField(row, `${kind}StopType`, `${kind}StopType`);
+      const stopType = (stopTypeSel?.value || 'base').toString().toLowerCase();
+      const showFixed = showStopControls && stopType === 'fixed';
+
+      row.style.display = showStopControls ? '' : 'none';
+
+      const psfWrap = row.querySelector('.stop-psf-wrap');
+      if (psfWrap) {
+        psfWrap.classList.toggle('hidden', !showFixed);
+        psfWrap.style.display = showFixed ? '' : 'none';
+      }
+
+      return { stopType, showFixed };
+    }
+
+    function initOpExRowDelegation() {
+      if (initOpExRowDelegation._didInit) return;
+      initOpExRowDelegation._didInit = true;
+
+      warnDuplicateIds();
+
+      const stopTypeFields = new Set(['taxesStopType', 'camStopType', 'insStopType']);
+      const stopPsfFields = new Set(['taxesStopPSF', 'camStopPSF', 'insStopPSF']);
+
+      const resolveKind = (field) => field.replace(/Stop(Type|PSF)$/u, '').toLowerCase();
+
+      const handleChange = (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        const fieldEl = target.closest('[data-field]');
+        const field = fieldEl?.dataset.field;
+        if (!field) return;
+
+        if (stopTypeFields.has(field)) {
+          const kind = resolveKind(field);
+          updateOpexLabels(kind);
+          calculate();
+        } else if (stopPsfFields.has(field)) {
+          calculate();
+        }
+      };
+
+      const handleInput = (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target) return;
+        const fieldEl = target.closest('[data-field]');
+        const field = fieldEl?.dataset.field;
+        if (!field) return;
+
+        if (stopPsfFields.has(field)) {
+          calculate();
+        }
+      };
+
+      document.addEventListener('change', handleChange);
+      document.addEventListener('input', handleInput);
+    }
+
     function updateOpexLabels(kind) {
-      const rawService = document.getElementById('serviceType')?.value || 'NNN';
-      const services = rawService.toString();
+      const services = getServiceType();
       const modeSelId = (kind === 'taxes') ? 'taxesMode' : (kind === 'cam') ? 'camMode' : 'insMode';
       const mode = document.getElementById(modeSelId)?.value || 'tenant';
-  
+
       const kickerId = (kind === 'taxes') ? 'lblTaxesKicker' : (kind === 'cam') ? 'lblCamKicker' : 'lblInsKicker';
       const hintId = (kind === 'taxes') ? 'hintTaxesMain' : (kind === 'cam') ? 'hintCamMain' : 'hintInsMain';
       const baseLblId = (kind === 'taxes') ? 'lblTaxesBase' : (kind === 'cam') ? 'lblCamBase' : 'lblInsBase';
-  
+
       const svc = services.toLowerCase();
       const isMG = (svc === 'mg');
       const isBaseStop = (mode === 'stop');
-  
+      const showStopControls = isBaseStop && isMG;
+
       // Show Pass-through Mode for MG leases
       const modeWrap = document.querySelector(`.opx-mode[data-for="${kind}"]`);
       if (modeWrap) modeWrap.style.display = isMG ? '' : 'none';
-  
-      const stopWrap = document.querySelector(`.opx-stop[data-for="${kind}"]`);
+
       const baseWrap = document.querySelector(`.opx-base[data-for="${kind}"]`);
-      const stopPSFWrap = document.getElementById(`${kind}StopPSFWrap`);
-      const stopTypeSel = document.getElementById(`${kind}StopType`);
-      const stopType = (stopTypeSel?.value || 'base').toLowerCase();
-      const showStopControls = isBaseStop && isMG;
+      const stopRows = document.querySelectorAll(`.opx-stop[data-for="${kind}"][data-row]`);
+
+      let stopType = 'base';
+      if (stopRows.length) {
+        stopRows.forEach((row, idx) => {
+          const rowState = updateStopRowVisibility(row, kind, showStopControls);
+          if (idx === 0 && rowState.stopType) {
+            stopType = rowState.stopType;
+          }
+        });
+      } else {
+        const legacyStopWrap = document.querySelector(`.opx-stop[data-for="${kind}"]`);
+        if (legacyStopWrap) legacyStopWrap.style.display = showStopControls ? '' : 'none';
+        const legacyStopType = document.getElementById(`${kind}StopType`);
+        if (legacyStopType) stopType = (legacyStopType.value || 'base').toString().toLowerCase();
+        const legacyPsfWrap = document.getElementById(`${kind}StopPSFWrap`);
+        if (legacyPsfWrap) legacyPsfWrap.style.display = (showStopControls && stopType === 'fixed') ? '' : 'none';
+      }
+
       const showFixed = showStopControls && stopType === 'fixed';
-  
-      if (stopWrap) stopWrap.style.display = showStopControls ? '' : 'none';
+
       if (baseWrap) baseWrap.style.display = (showStopControls && !showFixed) ? '' : 'none';
-      if (stopPSFWrap) stopPSFWrap.style.display = showFixed ? '' : 'none';
-  
+
       // Keep the per-line base-year visibility in sync (only when base-year stop applies)
       syncBaseYearVisibility(kind, showStopControls && !showFixed);
-  
+
       // Kicker “(Year 1 …)” only when base-year stop is active (MG or Custom)
       const kicker = document.getElementById(kickerId);
       if (kicker) kicker.hidden = !(isBaseStop && !showFixed);
-  
+
       // Hint text aligns with whether we’re in a base-year stop flow
       const hint = document.getElementById(hintId);
       if (hint) {
@@ -1235,7 +1341,7 @@ window.addEventListener('load', initMap);
             ? 'Enter the Year-1 value that will escalate by the annual rate above.'
             : 'Enter the current value that will escalate by the annual rate above.');
       }
-  
+
       // Base label stays the same
       const baseLbl = document.getElementById(baseLblId);
       if (baseLbl) {
@@ -1243,6 +1349,12 @@ window.addEventListener('load', initMap);
         else if (kind === 'cam') baseLbl.textContent = 'Base-year CAM ($/SF/yr)';
         else if (kind === 'ins') baseLbl.textContent = 'Base-year Insurance ($/SF/yr)';
       }
+    }
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', initOpExRowDelegation);
+    } else {
+      initOpExRowDelegation();
     }
   
     function wireOpexLabeling() {
@@ -1273,17 +1385,17 @@ window.addEventListener('load', initMap);
         ['insStopType', 'ins']
       ].forEach(([id, kind]) => {
         const sel = document.getElementById(id);
-        if (sel) {
+        if (sel && !sel.matches('[data-field]')) {
           sel.addEventListener('change', () => {
             updateOpexLabels(kind);
             calculate();
           });
         }
       });
-  
+
       ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(id => {
         const input = document.getElementById(id);
-        if (!input) return;
+        if (!input || input.matches('[data-field]')) return;
         ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
       });
   
