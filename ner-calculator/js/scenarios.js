@@ -1466,13 +1466,6 @@ function renderCompareGrid() {
       return Number.isFinite(num) ? num : fallback;
     };
 
-    const hostWidth = (() => {
-      const rectWidth = grid.getBoundingClientRect?.().width;
-      if (Number.isFinite(rectWidth) && rectWidth > 0) return rectWidth;
-      if (Number.isFinite(grid.clientWidth)) return grid.clientWidth;
-      return 0;
-    })();
-
     const paddingInline =
       parseSize(computed.paddingInlineStart ?? computed.paddingLeft) +
       parseSize(computed.paddingInlineEnd ?? computed.paddingRight);
@@ -1481,12 +1474,14 @@ function renderCompareGrid() {
       parseSize(computed.borderInlineEndWidth ?? computed.borderRightWidth);
     const scrollbarWidth = Math.max(0, grid.offsetWidth - grid.clientWidth);
 
-    const availableContent = Math.max(0, hostWidth - paddingInline - borderInline - scrollbarWidth);
-    const labelWidth = parseSize(computed.getPropertyValue('--summary-label-width'), 260);
-    const rawWidth = Math.floor((availableContent - labelWidth) / 3);
+    const rawContentWidth = grid.clientWidth - paddingInline - borderInline - scrollbarWidth;
+    const contentWidth = Number.isFinite(rawContentWidth) ? Math.max(0, rawContentWidth) : 0;
+
+    const labelWidth = Math.max(0, parseSize(computed.getPropertyValue('--summary-label-width'), 260));
+    const rawCardWidth = Math.floor((contentWidth - labelWidth) / 3);
     const cardWidth = Math.max(
       SUMMARY_CARD_WIDTH_MIN,
-      Math.min(SUMMARY_CARD_WIDTH_MAX, Number.isFinite(rawWidth) ? rawWidth : SUMMARY_CARD_WIDTH_MIN)
+      Math.min(SUMMARY_CARD_WIDTH_MAX, Number.isFinite(rawCardWidth) ? rawCardWidth : SUMMARY_CARD_WIDTH_MIN)
     );
     const visible = Math.max(1, Math.min(columnCount, 3));
 
