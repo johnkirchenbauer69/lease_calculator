@@ -151,7 +151,7 @@ function initMap() {
   marker.setDraggable(true).setPopup(popup).togglePopup();
 
   // ----- helpers -----
-  const addressInput = document.getElementById('suite');
+  const addressInput = document.getElementById('address');
   let isProgrammaticAddressUpdate = false;
   const setInput = (val) => {
     if (!addressInput) return;
@@ -1604,7 +1604,7 @@ window.addEventListener('load', initMap);
         // -----------------------------------------------------------------------
         // Read inputs
         // -----------------------------------------------------------------------
-        const suite = $('#suite')?.value.trim() || '';
+        const address = $('#address')?.value.trim() || '';
         const area = rawNumberFromInput($('#area'));
         const termUnit = $('#termUnit')?.value || 'months';
         let term = parseInt($('#term')?.value || "0", 10);
@@ -2472,7 +2472,7 @@ window.addEventListener('load', initMap);
         const startYearValue = Number.isFinite(startDate.getFullYear()) ? startDate.getFullYear() : null;
 
         const model = {
-          suite,
+          address,
           area,
           termMonths: term,
           startYear: startYearValue,
