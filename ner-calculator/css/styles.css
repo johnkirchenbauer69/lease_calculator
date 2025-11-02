@@ -3486,6 +3486,39 @@ td[data-unit][title] {
   font-weight:600;
   cursor:pointer;
 }
+
+/* Global cursor treatments */
+button:not(:disabled):not([aria-disabled="true"]),
+input:not(:disabled):not([aria-disabled="true"]):not([type="text" i]):not([type="email" i]):not([type="number" i]):not([type="password" i]):not([type="search" i]):not([type="tel" i]):not([type="url" i]):not([type="time" i]):not([type="date" i]):not([type="datetime-local" i]):not([type="month" i]):not([type="week" i]),
+a[href]:not([aria-disabled="true"]),
+select:not(:disabled):not([aria-disabled="true"]),
+details > summary:not([aria-disabled="true"]),
+[role="button"]:not([aria-disabled="true"]),
+:where(.btn, .btn-pill, .toggle, .toggle-btn, .seg-btn, .cmp-btn, .view-pills button, .cmp-actions .cmp-btn, .compare-controls label.toggle, .summary-grid .sortable, .scenario-badge, .tab, .pill, .icon-button, .chip.clickable):not([aria-disabled="true"]):not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+button[aria-disabled="true"],
+input:disabled,
+input[aria-disabled="true"],
+select:disabled,
+select[aria-disabled="true"],
+details > summary[aria-disabled="true"],
+a[aria-disabled="true"],
+[role="button"][aria-disabled="true"],
+:where(.btn, .btn-pill, .toggle, .toggle-btn, .seg-btn, .cmp-btn, .view-pills button, .cmp-actions .cmp-btn, .compare-controls label.toggle, .summary-grid .sortable, .scenario-badge, .tab, .pill, .icon-button, .chip.clickable)[aria-disabled="true"],
+:where(.btn, .btn-pill, .toggle, .toggle-btn, .seg-btn, .cmp-btn, .view-pills button, .cmp-actions .cmp-btn, .compare-controls label.toggle, .summary-grid .sortable, .scenario-badge, .tab, .pill, .icon-button, .chip.clickable):disabled {
+  cursor: not-allowed;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable * {
+  cursor: inherit;
+}
 .chip.chip-active {
   border-color: var(--accent, #e71d36);
   box-shadow: 0 0 0 1px rgba(231,29,54,.35) inset;
