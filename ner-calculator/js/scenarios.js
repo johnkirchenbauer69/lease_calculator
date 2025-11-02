@@ -1472,7 +1472,10 @@ function renderCompareGrid() {
     const borderInline =
       parseSize(computed.borderInlineStartWidth ?? computed.borderLeftWidth) +
       parseSize(computed.borderInlineEndWidth ?? computed.borderRightWidth);
-    const scrollbarWidth = Math.max(0, grid.offsetWidth - grid.clientWidth);
+    const scrollbarWidth = parseSize(
+      computed.getPropertyValue('scrollbar-width'),
+      Math.max(0, grid.offsetWidth - grid.clientWidth)
+    );
 
     let contentWidth = Number.isFinite(grid.clientWidth) ? grid.clientWidth : 0;
     contentWidth -= paddingInline;
@@ -1491,9 +1494,9 @@ function renderCompareGrid() {
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
     grid.style.setProperty('--summary-visible-count', String(visible));
 
-    const constrainedWidth = 'calc(var(--summary-label-width) + 3 * var(--summary-card-width))';
-    table.style.minWidth = constrainedWidth;
-    table.style.maxWidth = constrainedWidth;
+    const tablePixelWidth = Math.max(0, labelWidth + 3 * cardWidth);
+    table.style.minWidth = `${tablePixelWidth}px`;
+    table.style.maxWidth = `${tablePixelWidth}px`;
 
     scheduleSummaryUnderlayUpdate();
   }
