@@ -23,6 +23,35 @@
     // ------------------------------- Small helpers -------------------------------
     const $ = (sel, root = document) => root.querySelector(sel);
     const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+    const qField = (rootOrField, maybeField) => {
+      let scope = document;
+      let field = '';
+      if (typeof rootOrField === 'string' && maybeField == null) {
+        field = rootOrField;
+      } else if (rootOrField && typeof rootOrField.querySelector === 'function') {
+        scope = rootOrField;
+        field = maybeField;
+      } else {
+        field = maybeField;
+      }
+      if (!field) return null;
+      return scope.querySelector(`[data-field="${field}"]`) || scope.querySelector(`[name="${field}"]`);
+    };
+
+    const qFields = (field, root = document) => {
+      if (!field) return [];
+      const scope = (root && typeof root.querySelectorAll === 'function') ? root : document;
+      const seen = new Set();
+      const out = [];
+      scope.querySelectorAll(`[data-field="${field}"]`).forEach(el => {
+        if (!seen.has(el)) { seen.add(el); out.push(el); }
+      });
+      scope.querySelectorAll(`[name="${field}"]`).forEach(el => {
+        if (!seen.has(el)) { seen.add(el); out.push(el); }
+      });
+      return out;
+    };
   
     function rawNumberFromInput(input) {
       if (!input) return 0;
@@ -1207,29 +1236,41 @@ window.addEventListener('load', initMap);
       const modeWrap = document.querySelector(`.opx-mode[data-for="${kind}"]`);
       if (modeWrap) modeWrap.style.display = isMG ? '' : 'none';
   
-      const stopWrap = document.querySelector(`.opx-stop[data-for="${kind}"]`);
+      const stopRows = Array.from(document.querySelectorAll(`.opx-stop[data-for="${kind}"]`));
       const baseWrap = document.querySelector(`.opx-base[data-for="${kind}"]`);
-      const stopPSFWrap = document.getElementById(`${kind}StopPSFWrap`);
-      const stopTypeSel = document.getElementById(`${kind}StopType`);
-      const stopType = (stopTypeSel?.value || 'base').toLowerCase();
       const showStopControls = isBaseStop && isMG;
-      const showFixed = showStopControls && stopType === 'fixed';
-  
-      if (stopWrap) stopWrap.style.display = showStopControls ? '' : 'none';
-      if (baseWrap) baseWrap.style.display = (showStopControls && !showFixed) ? '' : 'none';
-      if (stopPSFWrap) stopPSFWrap.style.display = showFixed ? '' : 'none';
-  
+
+      let primaryStopType = 'base';
+      if (stopRows.length > 0) {
+        const primarySel = qField(stopRows[0], `${kind}StopType`);
+        if (primarySel) primaryStopType = (primarySel.value || 'base').toLowerCase();
+      } else {
+        const primarySel = qField(`${kind}StopType`);
+        if (primarySel) primaryStopType = (primarySel.value || 'base').toLowerCase();
+      }
+      const showFixedPrimary = showStopControls && primaryStopType === 'fixed';
+
+      stopRows.forEach(row => {
+        row.style.display = showStopControls ? '' : 'none';
+        const rowStopType = (qField(row, `${kind}StopType`)?.value || 'base').toLowerCase();
+        const rowFixed = showStopControls && rowStopType === 'fixed';
+        const rowWrap = qField(row, `${kind}StopPSFWrap`);
+        if (rowWrap) rowWrap.style.display = rowFixed ? '' : 'none';
+      });
+
+      if (baseWrap) baseWrap.style.display = (showStopControls && !showFixedPrimary) ? '' : 'none';
+
       // Keep the per-line base-year visibility in sync (only when base-year stop applies)
-      syncBaseYearVisibility(kind, showStopControls && !showFixed);
+      syncBaseYearVisibility(kind, showStopControls && !showFixedPrimary);
   
       // Kicker “(Year 1 …)” only when base-year stop is active (MG or Custom)
       const kicker = document.getElementById(kickerId);
-      if (kicker) kicker.hidden = !(isBaseStop && !showFixed);
+      if (kicker) kicker.hidden = !(isBaseStop && !showFixedPrimary);
   
       // Hint text aligns with whether we’re in a base-year stop flow
       const hint = document.getElementById(hintId);
       if (hint) {
-        hint.textContent = showFixed
+        hint.textContent = showFixedPrimary
           ? 'Tenant pays only the portion above the fixed stop entered below.'
           : (isBaseStop
             ? 'Enter the Year-1 value that will escalate by the annual rate above.'
@@ -1271,20 +1312,19 @@ window.addEventListener('load', initMap);
         ['taxesStopType', 'taxes'],
         ['camStopType', 'cam'],
         ['insStopType', 'ins']
-      ].forEach(([id, kind]) => {
-        const sel = document.getElementById(id);
-        if (sel) {
+      ].forEach(([field, kind]) => {
+        qFields(field).forEach(sel => {
           sel.addEventListener('change', () => {
             updateOpexLabels(kind);
             calculate();
           });
-        }
+        });
       });
-  
-      ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(id => {
-        const input = document.getElementById(id);
-        if (!input) return;
-        ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
+
+      ['taxesStopPSF', 'camStopPSF', 'insStopPSF'].forEach(field => {
+        qFields(field).forEach(input => {
+          ['input', 'change'].forEach(evt => input.addEventListener(evt, calculate));
+        });
       });
   
       // initial
@@ -1713,12 +1753,12 @@ window.addEventListener('load', initMap);
         const taxesBaseAnn = rawNumberFromInput($('#taxesBase')); // $/SF/yr or blank for auto
         const camBaseAnn = rawNumberFromInput($('#camBase'));
         const insBaseAnn = rawNumberFromInput($('#insBase'));
-        const taxesStopType = ($('#taxesStopType')?.value || 'base').toLowerCase();
-        const camStopType = ($('#camStopType')?.value || 'base').toLowerCase();
-        const insStopType = ($('#insStopType')?.value || 'base').toLowerCase();
-        const taxesFixedStop = rawNumberFromInput($('#taxesStopPSF'));
-        const camFixedStop = rawNumberFromInput($('#camStopPSF'));
-        const insFixedStop = rawNumberFromInput($('#insStopPSF'));
+        const taxesStopType = (qField('taxesStopType')?.value || 'base').toLowerCase();
+        const camStopType = (qField('camStopType')?.value || 'base').toLowerCase();
+        const insStopType = (qField('insStopType')?.value || 'base').toLowerCase();
+        const taxesFixedStop = rawNumberFromInput(qField('taxesStopPSF'));
+        const camFixedStop = rawNumberFromInput(qField('camStopPSF'));
+        const insFixedStop = rawNumberFromInput(qField('insStopPSF'));
   
         // Commission & discount
         const brokerCommPct = rawNumberFromInput($('#brokerCommission')) / 100;
