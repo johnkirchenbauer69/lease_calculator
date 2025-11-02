@@ -2464,6 +2464,7 @@ body {
 /* === Results layout (rows) =============================================== */
 /* Make the whole Results panel a 2-column header grid */
 .panel-results {
+    --panel-gutter: clamp(16px, 3vw, 24px);
     display: grid;
     grid-template-columns: 1fr auto;
     /* left: title, right: landlord/tenant */
@@ -3503,7 +3504,7 @@ td[data-unit][title] {
   max-width:1600px;
   margin:0 auto;
   width:100%;
-  padding:0 24px 24px;
+  padding:0 var(--panel-gutter, 24px) 24px;
   overflow-x:hidden;
 }
 .comparison-summary {
@@ -3541,6 +3542,10 @@ td[data-unit][title] {
   max-width:100%;
   width:100%;
   margin:0;
+}
+.comparison-summary .summary-grid {
+  margin-inline: calc(-1 * var(--panel-gutter, 24px));
+  padding-inline: var(--panel-gutter, 24px);
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
