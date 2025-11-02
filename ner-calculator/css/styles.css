@@ -3752,13 +3752,16 @@ td[data-unit][title] {
   left:0;
   width:0;
   height:0;
+  border:none;
+  outline:none;
+  box-shadow:none;
   border-radius:12px;
   background:rgba(255,255,255,0.035);
   transition:background .25s ease;
 }
 
 .comparison-summary .summary-col-bg.is-leader {
-  background:rgba(231,29,54,0.08);
+  background:rgba(231,29,54,0.12);
 }
 
 .comparison-summary .section-header-bar {
