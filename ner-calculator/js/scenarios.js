@@ -1428,11 +1428,6 @@ function renderCompareGrid() {
 
   let summaryUnderlayRaf = null;
 
-  const summaryViewportState = {
-    grid: null,
-    columnCount: 0
-  };
-
   function scheduleSummaryUnderlayUpdate() {
     if (summaryUnderlayRaf != null) {
       cancelAnimationFrame(summaryUnderlayRaf);
@@ -1455,6 +1450,9 @@ function renderCompareGrid() {
     return host;
   }
 
+  const SUMMARY_CARD_WIDTH_MIN = 320;
+  const SUMMARY_CARD_WIDTH_MAX = 440;
+
   function configureSummaryViewport(grid, columnCount) {
     if (!grid) return;
 
@@ -1462,30 +1460,39 @@ function renderCompareGrid() {
     if (!table) return;
 
     const computed = getComputedStyle(grid);
-    const parse = (value) => {
+    const parseSize = (value, fallback = 0) => {
+      if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
       const num = Number.parseFloat(value);
-      return Number.isFinite(num) ? num : 0;
+      return Number.isFinite(num) ? num : fallback;
     };
 
-    const padding = parse(computed.paddingLeft) + parse(computed.paddingRight);
-    const border = parse(computed.borderLeftWidth) + parse(computed.borderRightWidth);
-    const usableWidth = grid.clientWidth - padding - border;
-    const labelWidth = parse(computed.getPropertyValue('--summary-label-width')) || 260;
-    const cardWidth = Math.max(280, Math.floor((usableWidth - labelWidth) / 3));
+    const paddingInline =
+      parseSize(computed.paddingInlineStart ?? computed.paddingLeft) +
+      parseSize(computed.paddingInlineEnd ?? computed.paddingRight);
+    const borderInline =
+      parseSize(computed.borderInlineStartWidth ?? computed.borderLeftWidth) +
+      parseSize(computed.borderInlineEndWidth ?? computed.borderRightWidth);
+    const scrollbarWidth = Math.max(0, grid.offsetWidth - grid.clientWidth);
+
+    const rawContentWidth = grid.clientWidth - paddingInline - borderInline - scrollbarWidth;
+    const contentWidth = Number.isFinite(rawContentWidth) ? Math.max(0, rawContentWidth) : 0;
+
+    const labelWidth = Math.max(0, parseSize(computed.getPropertyValue('--summary-label-width'), 260));
+    const rawCardWidth = Math.floor((contentWidth - labelWidth) / 3);
+    const cardWidth = Math.max(
+      SUMMARY_CARD_WIDTH_MIN,
+      Math.min(SUMMARY_CARD_WIDTH_MAX, Number.isFinite(rawCardWidth) ? rawCardWidth : SUMMARY_CARD_WIDTH_MIN)
+    );
     const visible = Math.max(1, Math.min(columnCount, 3));
 
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
     grid.style.setProperty('--summary-visible-count', String(visible));
 
-    const totalWidth = labelWidth + 3 * cardWidth;
-    table.style.minWidth = `${totalWidth}px`;
-    table.style.maxWidth = `${totalWidth}px`;
-  }
+    const tablePixelWidth = Math.max(0, labelWidth + 3 * cardWidth);
+    table.style.minWidth = `${tablePixelWidth}px`;
+    table.style.maxWidth = `${tablePixelWidth}px`;
 
-  function refreshSummaryViewport() {
-    const { grid, columnCount } = summaryViewportState;
-    if (!grid || !grid.isConnected) return;
-    configureSummaryViewport(grid, columnCount);
+    scheduleSummaryUnderlayUpdate();
   }
 
   function updateSummaryUnderlays() {
@@ -1570,13 +1577,6 @@ function renderCompareGrid() {
     const models = _getCompareModels();
     if (!models.length) {
       mount.innerHTML = '<div class="summary-wrap"><div class="summary-grid"><div class="note" style="padding:16px;">Pin scenarios to compare.</div></div></div>';
-      const grid = mount.querySelector('.summary-grid');
-      summaryViewportState.grid = grid || null;
-      summaryViewportState.columnCount = 0;
-      if (grid) {
-        configureSummaryViewport(grid, 0);
-      }
-      scheduleSummaryUnderlayUpdate();
       return;
     }
 
@@ -1623,9 +1623,6 @@ function renderCompareGrid() {
     });
 
     const grid = mount.querySelector('.summary-grid');
-    summaryViewportState.grid = grid || null;
-    summaryViewportState.columnCount = grid ? columnCount : 0;
-
     if (grid) {
       configureSummaryViewport(grid, columnCount);
       scheduleSummaryUnderlayUpdate();
@@ -1656,16 +1653,12 @@ function renderCompareGrid() {
         scheduleSummaryUnderlayUpdate();
       });
     }
-    if (!grid) {
-      scheduleSummaryUnderlayUpdate();
-    }
+
+    scheduleSummaryUnderlayUpdate();
   };
 
   if (!window.__summaryUnderlayResizeBound) {
-    window.addEventListener('resize', () => {
-      refreshSummaryViewport();
-      scheduleSummaryUnderlayUpdate();
-    });
+    window.addEventListener('resize', scheduleSummaryUnderlayUpdate);
     window.__summaryUnderlayResizeBound = true;
   }
 })();
