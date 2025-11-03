@@ -73,6 +73,44 @@ function renderChartBlock(chart) {
   `;
 }
 
+function buildRentSummaryFromSchedule(schedule = []) {
+  if (!Array.isArray(schedule) || schedule.length === 0) return [];
+
+  const summary = [];
+  const buckets = new Map();
+
+  schedule.forEach((row, idx) => {
+    if (!row || typeof row !== 'object') return;
+
+    const baseRent = Number(row.netTotal) || 0;
+    const total = Number(row.grossTotal) || 0;
+    const opex = total - baseRent;
+
+    const monthIndex = Number(row.monthIndex) || idx + 1;
+    const yearIndex = Math.floor((monthIndex - 1) / 12);
+    const key = row.calYear ?? yearIndex;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      const periodLabel = row.calYear != null ? String(row.calYear) : `Year ${yearIndex + 1}`;
+      bucket = { period: periodLabel, rent: 0, opex: 0, total: 0 };
+      buckets.set(key, bucket);
+      summary.push(bucket);
+    }
+
+    bucket.rent += baseRent;
+    bucket.opex += opex;
+    bucket.total += total;
+  });
+
+  return summary.map(({ period, rent, opex, total }) => ({
+    period,
+    rent,
+    opex,
+    total,
+    note: '',
+  }));
+}
+
 function renderRentScheduleRows(schedule = []) {
   return schedule.map((row, idx) => {
     const period = row.period ?? `Year ${idx + 1}`;
@@ -102,6 +140,7 @@ export default function renderProposalTemplate({ deal = {}, scenarios = [], char
     preparedBy = '',
     preparedDate,
     rentSchedule = [],
+    schedule = [],
     highlights = [],
   } = deal;
 
@@ -116,7 +155,11 @@ export default function renderProposalTemplate({ deal = {}, scenarios = [], char
 
   const scenarioCards = scenarios.slice(0, 3).map(renderScenarioCard).join('');
   const chartBlocks = charts.map(renderChartBlock).join('');
-  const rentRows = renderRentScheduleRows(rentSchedule);
+  const printableSchedule = Array.isArray(rentSchedule) && rentSchedule.length
+    ? rentSchedule
+    : buildRentSummaryFromSchedule(schedule);
+
+  const rentRows = renderRentScheduleRows(printableSchedule);
   const highlightList = highlights.map((item) => `<li>${item}</li>`).join('');
 
   return `
