@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "pdf:test": "node -e \"console.log('Run server and POST to /api/pdf with sample payload')\""
   },
   "devDependencies": {
-    "vitest": "^1.5.0"
+    "vitest": "^1.5.0",
+    "playwright": "^1.43.1"
   }
 }
