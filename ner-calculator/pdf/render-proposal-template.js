@@ -115,7 +115,16 @@ export default function renderProposalTemplate({ deal = {}, scenarios = [], char
     : '';
 
   const scenarioCards = scenarios.slice(0, 3).map(renderScenarioCard).join('');
-  const chartBlocks = charts.map(renderChartBlock).join('');
+  const normalizedCharts = Array.isArray(charts)
+    ? charts
+    : charts && typeof charts === 'object'
+      ? Object.entries(charts).map(([chartTitle, chartValue]) => (
+          chartValue && typeof chartValue === 'object'
+            ? { title: chartTitle, ...chartValue }
+            : { title: chartTitle, image: chartValue }
+        ))
+      : [];
+  const chartBlocks = normalizedCharts.map(renderChartBlock).join('');
   const rentRows = renderRentScheduleRows(rentSchedule);
   const highlightList = highlights.map((item) => `<li>${item}</li>`).join('');
 
