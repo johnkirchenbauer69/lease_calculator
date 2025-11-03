@@ -21,10 +21,6 @@
         : '—');
 
     // Calculation helpers keep numbers exact.
-    const calcRound2 = (value) => Number(value) || 0;
-    const calcRound4 = (value) => Number(value) || 0;
-    const round2 = calcRound2;
-    const round4 = calcRound4;
     const finalizeMonthlyCurrency = (raw = {}) => ({ ...raw });
 
     const roundingAPI = window.rounding || {};
@@ -2460,7 +2456,8 @@ window.addEventListener('load', initMap);
           const paidBase = (+row.preBase$ || 0) - (+row.freeBase$ || 0);
           totalBaseRentNominal += paidBase;
         });
-        totalBaseRentNominal = round2(totalBaseRentNominal);
+        // exact-first: keep full precision; defer rounding to display
+        // totalBaseRentNominal remains as-is
 
         const safeNum = (n) => (Number.isFinite(n) ? n : 0);
         const kpis = buildKpis({

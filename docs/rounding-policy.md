@@ -34,3 +34,9 @@ model never bakes in presentation rounding.
 
 This separation keeps the economic model deterministic and free from penny
 drift while letting every surface format values as needed for users.
+
+## Implementation Notes
+
+- Removed no-op `round2`/`round4` calls from the calculation path to avoid
+  implying rounding occurs during math; rounding is applied only in display
+  renderers.

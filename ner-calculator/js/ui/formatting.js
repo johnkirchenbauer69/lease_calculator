@@ -1,8 +1,3 @@
-const safeNumber = (value) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-};
-
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -15,9 +10,6 @@ const psfFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 4
 });
 
-export const round2 = (n) => Math.round((safeNumber(n) + Number.EPSILON) * 100) / 100;
-export const round4 = (n) => Math.round((safeNumber(n) + Number.EPSILON) * 10000) / 10000;
-
 export const formatCurrency = (value) => {
   if (!Number.isFinite(Number(value))) return '—';
   return currencyFormatter.format(Number(value));
@@ -29,8 +21,6 @@ export const formatPSF = (value) => {
 };
 
 const formattingAPI = {
-  round2,
-  round4,
   formatCurrency,
   formatPSF
 };
