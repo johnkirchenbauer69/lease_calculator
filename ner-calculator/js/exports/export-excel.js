@@ -14,7 +14,7 @@
 
   // Common number formats
   const fmtInt   = '#,##0';
-  const fmtPSF   = '"$"#,##0.00';
+  const fmtPSF   = '"$"#,##0.0000';
   const fmtPct   = '0.00%';
   const fmtMoney = '"$"#,##0.00;[Red]\\-"$"#,##0.00';
 

@@ -1,57 +1,42 @@
-# Rounding Policy
+# Exact-First Rounding Policy
 
-The lease calculator now maintains full-precision math through intermediate calculations and applies rounding only when a monthly cash-flow line item is committed to the schedule. The policy ensures that:
+The lease calculator follows an **exact-first** policy so that the economic
+model never bakes in presentation rounding.
 
-- All intermediate math (rent escalation, recoveries, fees, TI amortization, etc.) is computed in floating point with full precision.
-- At the point a monthly schedule row is finalized, every currency amount is rounded to the nearest cent via `round2(...)` and every $/SF metric is rounded to four decimals via `round4(...)`.
-- Annual totals are the sum of these rounded monthly values—no alternate recomputation bypasses the rounded months.
-- Present value (PV) calculations discount the rounded monthly cashflows.
+## Core Principles
 
-The helpers live in `ner-calculator/js/engine/rounding.js` and are exposed both as ES module exports and on `window.rounding` for legacy scripts:
+- **Math uses full precision.** All rent, OpEx, fee, concession, and incentive
+  calculations operate on raw `number` values without truncation.
+- **Model storage stays exact.** The monthly schedule rows, running totals, and
+  KPI aggregates store the precise numeric results produced by the engine—never
+  strings and never pre-rounded decimals.
+- **Display handles formatting.** UI renderers (tables, KPI cards, charts,
+  tooltips, PDF/Excel exports, etc.) are responsible for applying rounding or
+  localized number formatting. Formatting helpers return strings strictly for
+  display and never write back into the model.
 
-```js
-round2(n);          // => cents rounding
-round4(n);          // => $/SF precision
-finalizeMonthlyCurrency(map); // normalizes & rounds currency fields in one pass
-sumRounded(values);          // adds rounded months without penny drift
-pvFromRounded(cashflows, r); // discounts rounded cashflows
-```
+## Present Value
 
-## Implementation Highlights
+- **PV is computed from exact monthlies.** Discounted cash-flow metrics use the
+  exact monthly cashflows and the exact monthly discount rate.
 
-- `ner-calculator/js/app.js` computes all monthly values using full precision and then calls `finalizeMonthlyCurrency(...)` before pushing a row into the schedule. The same rounded numbers feed totals, PV, KPIs, charts, scenarios, and exports.
-- Custom OpEx items, management fees, and landlord OpEx shares are rounded per item, then aggregated.
-- Annual contract PSF values are derived from rounded monthly PSF and stored with four-decimal precision.
-- Rounding adjustments are captured per calendar year (`model.roundingAdjustments`). When the sum of rounded months differs from the raw annual recomputation by ≥ $0.01, a dev warning is emitted (`[RoundingGuard]`) so penny drift is visible during development.
+## Annual Totals
 
-## Examples
+- **Annuals sum exact months.** Yearly totals come from summing the precise
+  monthly values; rounding is applied only when displaying those totals.
 
-| Component | Calculation Stage | Rounding Applied |
-| --- | --- | --- |
-| Base rent | Escalation math uses full precision. When the monthly payment is added to the schedule, `round2` is applied. | Monthly cents. |
-| OpEx recoveries | Stops & growth computed in full precision. Tenant and landlord monthly dollars are rounded before storage; annual PSF summaries use `round4`. | Monthly cents / annual $/SF(4). |
-| Management fee | Fee basis (gross vs. net) calculated in full precision. The resulting tenant/landlord dollars are rounded per month and feed totals & PV. | Monthly cents. |
-| TI amortization | Payment amount derived from precise annuity math. If amortized, the monthly inflow is rounded before inclusion in cashflows. | Monthly cents. |
-| Commission (future) | Keep full precision for the basis and percent; round only when the monthly payment hits the schedule. | Monthly cents. |
+## Display & Exports
 
-## Display Formatting
+- **UI formatting only.** Currency and PSF presentation uses dedicated
+  formatting helpers that convert numbers to strings as late as possible.
+- **Excel number formats.** Excel exports write the exact numeric values into
+  cells and rely on `numFmt` for presentation.
 
-- `toLocaleString`, `Intl.NumberFormat`, and similar APIs remain strictly presentation helpers—formatted strings never feed back into the model or calculations.
-- Guardrails (`warnIfFormatted`) log a warning if a string slips into the schedule or KPI data during development (`window.NER_DEV_GUARDS !== false`).
-- Duplicate DOM ids trigger a dev warning to help avoid rendering bugs tied to rounded inputs.
+This separation keeps the economic model deterministic and free from penny
+drift while letting every surface format values as needed for users.
 
-## Excel & PDF Exports
+## Implementation Notes
 
-- Exports read the numeric model values directly. Excel sheets rely on cell formatting (`numFmt`) for presentation, so no additional rounding is performed in the export layer.
-- Optional rounding adjustment rows can be surfaced later; currently the adjustments are logged in the console for visibility.
-
-## Testing
-
-- `npm test` runs Vitest specs in `tests/rounding.spec.js` covering helper behavior:
-  - `finalizeMonthlyCurrency` returns numeric cents.
-  - Annual totals equal the sum of rounded months (`sumRounded`).
-  - `pvFromRounded` matches discounted rounded cashflows within $0.01.
-  - `round4` preserves four-decimal PSF precision.
-
-Use these tests whenever rounding code changes to guarantee the policy remains intact.
-
+- Removed no-op `round2`/`round4` calls from the calculation path to avoid
+  implying rounding occurs during math; rounding is applied only in display
+  renderers.

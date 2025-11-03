@@ -8,39 +8,52 @@
     let activeView = "monthly";            // "monthly" | "annual" | "monthly+subtotals"
     let activePerspective = "landlord";    // "landlord" | "tenant"
   
-    // A tiny USD formatter (falls back if you have a global formatCurrency)
-    const fmtUSD = (n) =>
-      (typeof window.formatCurrency === "function")
-        ? window.formatCurrency(n)
-        : (n ?? 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
-  
-    const $id = (s) => document.getElementById(s);
-    const setText = (id, txt) => { const el = $id(id); if (el) el.textContent = txt; };
-    const fmt$ = (n) => (Number.isFinite(n) ? n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }) : '—');
-    const fmt$0 = (n) => (Number.isFinite(n) ? n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) : '—');
-    const fmtPct = (n) => (Number.isFinite(n) ? (n * 100).toFixed(1) + '%' : '—');
+    const formattingAPI = window.NERFormatting || {};
+    const formatCurrency = typeof formattingAPI.formatCurrency === 'function'
+      ? formattingAPI.formatCurrency
+      : (value) => (Number.isFinite(Number(value))
+        ? Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '—');
+    const formatPSF = typeof formattingAPI.formatPSF === 'function'
+      ? formattingAPI.formatPSF
+      : (value) => (Number.isFinite(Number(value))
+        ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}/SF`
+        : '—');
+
+    // Calculation helpers keep numbers exact.
+    const finalizeMonthlyCurrency = (raw = {}) => ({ ...raw });
 
     const roundingAPI = window.rounding || {};
-    const round2 = typeof roundingAPI.round2 === 'function'
-      ? (value) => roundingAPI.round2(Number(value) || 0)
-      : (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
-    const round4 = typeof roundingAPI.round4 === 'function'
-      ? (value) => roundingAPI.round4(Number(value) || 0)
-      : (value) => Math.round((Number(value) + Number.EPSILON) * 10000) / 10000;
-    const finalizeMonthlyCurrency = typeof roundingAPI.finalizeMonthlyCurrency === 'function'
-      ? (raw) => roundingAPI.finalizeMonthlyCurrency(raw)
-      : (raw = {}) => {
-          const result = {};
-          Object.entries(raw).forEach(([key, val]) => {
-            result[key] = round2(val);
-          });
-          return result;
-        };
+    const pvFromExact = typeof roundingAPI.pvFromExact === 'function'
+      ? roundingAPI.pvFromExact
+      : (cashflows = [], rate = 0, startOffset = 1) => cashflows.reduce((total, cash, index) => {
+          const t = index + startOffset;
+          const factor = 1 / Math.pow(1 + rate, t);
+          return total + Number(cash || 0) * factor;
+        }, 0);
+
+    const $id = (s) => document.getElementById(s);
+    const setText = (id, txt) => { const el = $id(id); if (el) el.textContent = txt; };
+    const fmtUSD = (n) => formatCurrency(n);
+    const fmt$ = (n) => formatCurrency(n);
+    const fmt$0 = (n) => (Number.isFinite(n)
+      ? Number(n).toLocaleString(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+      : '—');
+    const fmtPct = (n) => (Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : '—');
+
     const devGuardsEnabled = window.NER_DEV_GUARDS !== false;
     const warnIfFormatted = (label, value) => {
       if (!devGuardsEnabled) return;
       if (typeof value === 'string') {
-        console.warn(`[RoundingGuard] Expected numeric value for ${label}; received string`, value);
+        const trimmed = value.trim();
+        const looksToFixed = /^-?\d+\.\d+$/.test(trimmed) && !trimmed.includes(',');
+        const looksLocale = /[$,]/.test(trimmed);
+        const reason = looksLocale
+          ? 'value appears to be locale-formatted'
+          : looksToFixed
+            ? 'value appears to come from toFixed()'
+            : 'string assigned to numeric field';
+        console.warn(`[ExactGuard] ${reason} for ${label}`, value);
       }
     };
   
@@ -93,7 +106,7 @@
       return Number.isFinite(n) ? n / 100 : 0;
     }
   
-    function fmtPSF(v) { return (isFinite(v) ? `$${v.toFixed(2)}/SF` : '$0.00/SF'); }
+    function fmtPSF(v) { return formatPSF(v); }
 
     function computeLandlordFreeTI({ tiAmount = 0, tiUnit = 'per_sf', areaSF = 0, treatment = 'cash' } = {}) {
       const amount = Number(tiAmount) || 0;
@@ -1974,19 +1987,6 @@ window.addEventListener('load', initMap);
         let abatedMonths = 0;
         let tenantOpExNominal = 0; // tenant-paid OpEx over term (gross - net)
 
-        const roundingSumsByYear = {};
-        const trackRounding = (year, key, rounded, raw) => {
-          if (!Number.isFinite(year)) return;
-          const yr = Number(year);
-          if (!roundingSumsByYear[yr]) roundingSumsByYear[yr] = {};
-          const bucket = roundingSumsByYear[yr];
-          if (!bucket[key]) bucket[key] = { rounded: 0, raw: 0 };
-          bucket[key].rounded += Number(rounded) || 0;
-          bucket[key].raw += Number(raw) || 0;
-        };
-
-        let roundingAdjustments = [];
-  
         // If you later want LL OpEx carry inside cash outlay, you already have pvLLOpex/totalLLOpex
         const schedule = [];
   
@@ -2023,6 +2023,10 @@ window.addEventListener('load', initMap);
           : 0;
   
         let totalOtherAnnualPSF = 0;
+        const monthlyNetCash = [];
+        const monthlyGrossCash = [];
+        const monthlyLLOpexCash = [];
+        const monthlyFreeGross = [];
   
         for (let m = 1; m <= scheduleMonths; m++) {
           const rowDate = new Date(startDate.getFullYear(), startDate.getMonth() + (m - 1), 1);
@@ -2216,15 +2220,6 @@ window.addEventListener('load', initMap);
           const freeBase$ = Math.max(0, preBase$ - netPay);
           const recov$ = Math.max(0, grossPay - netPay);
   
-          totalPaidNet += netPay;
-          totalPaidGross += grossPay;
-  
-          // PV factors
-          const t = (m - 1) + pvStartOffset;
-          const pvFactor = 1 / Math.pow(1 + rMonthly, t);
-          pvRent += grossPay * pvFactor;
-          pvRentNet += netPay * pvFactor;
-  
           // LL OpEx dollars (after including Other)
           const llOpex$ = llOpexPSF * area * cashFactor;
 
@@ -2249,69 +2244,55 @@ window.addEventListener('load', initMap);
             llOpex$: llOpex$
           };
 
-          const roundedCurrency = finalizeMonthlyCurrency(rawCurrency);
+          const currency = finalizeMonthlyCurrency(rawCurrency);
 
-          const customItemsRounded = customItemsThisPeriod.map(item => ({
+          const customItemsExact = customItemsThisPeriod.map(item => ({
             ...item,
-            tenantDollars: round2(item.tenantDollars),
-            landlordDollars: round2(item.landlordDollars)
+            tenantDollars: Number(item.tenantDollars) || 0,
+            landlordDollars: Number(item.landlordDollars) || 0
           }));
 
-          const tenantOtherRounded = round2(customItemsRounded.reduce((sum, item) => sum + (item.tenantDollars || 0), 0));
-          const landlordOtherRounded = round2(customItemsRounded.reduce((sum, item) => sum + (item.landlordDollars || 0), 0));
+          const tenantOtherExact = customItemsExact.reduce((sum, item) => sum + (item.tenantDollars || 0), 0);
+          const landlordOtherExact = customItemsExact.reduce((sum, item) => sum + (item.landlordDollars || 0), 0);
 
-          roundedCurrency.tenantOther$ = tenantOtherRounded;
-          roundedCurrency.llOther$ = landlordOtherRounded;
-          roundedCurrency.other$ = tenantOtherRounded;
+          currency.tenantOther$ = tenantOtherExact;
+          currency.llOther$ = landlordOtherExact;
+          currency.other$ = tenantOtherExact;
 
-          const netRounded = roundedCurrency.netTotal;
-          const grossRounded = roundedCurrency.grossTotal;
-          const llOpexRounded = roundedCurrency.llOpex$;
-          const preBaseRounded = roundedCurrency.preBase$;
-          const preGrossRounded = roundedCurrency.preGross$;
-          const freeBaseRounded = roundedCurrency.freeBase$;
-          const recoveriesRounded = roundedCurrency.recoveries$;
-          const tenantMgmtRounded = roundedCurrency.tenantMgmt$;
+          totalPaidNet += netPay;
+          totalPaidGross += grossPay;
+          totalLLOpex += llOpex$;
 
-          totalPaidNet += netRounded;
-          totalPaidGross += grossRounded;
-
-          pvRent += grossRounded * pvFactor;
-          pvRentNet += netRounded * pvFactor;
-
-          pvLLOpex += llOpexRounded * pvFactor;
-          totalLLOpex += llOpexRounded;
-
-          // Value of free rent (use pre-abatement tallies)
-          if (inFree) {
-            abatedMonths += 1;
-            const forgiven = (abateType === 'gross') ? preGrossRounded : preBaseRounded;
-            freeGrossNominal += forgiven;
-            freeGrossPV += forgiven * pvFactor;
-          }
-
-          // Tenant OpEx paid (post-abatement)
-          tenantOpExNominal += Math.max(0, grossRounded - netRounded);
+          monthlyNetCash.push(netPay);
+          monthlyGrossCash.push(grossPay);
+          monthlyLLOpexCash.push(llOpex$);
 
           const isGrossAbated = inFree && (abateType === 'gross');
-  
+
+          if (inFree) {
+            abatedMonths += 1;
+            const forgiven = (abateType === 'gross') ? preGrossPay : preBase$;
+            freeGrossNominal += forgiven;
+            monthlyFreeGross.push(forgiven);
+          } else {
+            monthlyFreeGross.push(0);
+          }
+
+          tenantOpExNominal += Math.max(0, grossPay - netPay);
+
           // Identify row labels
           const calYear = rowDate.getFullYear();
           const monthName = rowDate.toLocaleString(undefined, { month: "short" });
 
-          trackRounding(calYear, 'net', netRounded, netPay);
-          trackRounding(calYear, 'gross', grossRounded, grossPay);
-          trackRounding(calYear, 'llOpex', llOpexRounded, llOpex$);
-
           // Tenant mgmt as monthly PSF (used in PSF bundle)
-          const tenantMgmtMoPSF = (tenantMgmtRounded && area && cashFactor)
-            ? (tenantMgmtRounded / (area * cashFactor))
+          const tenantMgmtMoPSF = (currency.tenantMgmt$ && area && cashFactor)
+            ? (currency.tenantMgmt$ / (area * cashFactor))
             : 0;
-  
+
           // Tenant-paid gross PSF (monthly)
           const tenGrossMoPSF =
             baseMonthlyPSF + tenTxMo + tenCamMo + tenInsMo + otherTenantMoPSF + tenantMgmtMoPSF;
-  
+
           // Assemble the row FIRST, then push it
           const row = {
             // identifiers
@@ -2321,80 +2302,80 @@ window.addEventListener('load', initMap);
             monthIndex: m,
 
             // PSF (monthly, tenant-paid portions)
-            basePSF: round4(netMonthlyPSF),
-            taxesPSF: round4(tenTxMo),
-            camPSF: round4(tenCamMo),
-            insPSF: round4(tenInsMo),
+            basePSF: netMonthlyPSF,
+            taxesPSF: tenTxMo,
+            camPSF: tenCamMo,
+            insPSF: tenInsMo,
 
             // “Other” tenant-paid monthly PSF + annualized display value
-            otherPSF: round4(otherTenantMoPSF),                 // monthly PSF (tenant-paid)
-            contractOtherAnnualPSF: round4(otherTenantAnnPSF),  // $/SF/yr (tenant-paid)
+            otherPSF: otherTenantMoPSF,                 // monthly PSF (tenant-paid)
+            contractOtherAnnualPSF: otherTenantAnnPSF,  // $/SF/yr (tenant-paid)
 
             // cash
-            netTotal: netRounded,
-            grossTotal: grossRounded,
+            netTotal: currency.netTotal,
+            grossTotal: currency.grossTotal,
 
             // breakdowns used by compare grid
-            preBase$: preBaseRounded,
-            freeBase$: freeBaseRounded,
-            other$: roundedCurrency.other$,
-            recoveries$: recoveriesRounded,
+            preBase$: currency.preBase$,
+            freeBase$: currency.freeBase$,
+            other$: currency.other$,
+            recoveries$: currency.recoveries$,
 
             // extras
-            llOpex$: llOpexRounded,
+            llOpex$: currency.llOpex$,
             area,
             isGrossAbated,
             cashFactor,
             isTermMonth,
 
             // tenant/LL OpEx dollars this month
-            tenantTaxes$: roundedCurrency.tenantTaxes$,
-            tenantCam$: roundedCurrency.tenantCam$,
-            tenantIns$: roundedCurrency.tenantIns$,
-            tenantOther$: roundedCurrency.tenantOther$,
+            tenantTaxes$: currency.tenantTaxes$,
+            tenantCam$: currency.tenantCam$,
+            tenantIns$: currency.tenantIns$,
+            tenantOther$: currency.tenantOther$,
 
-            llTaxes$: roundedCurrency.llTaxes$,
-            llCam$: roundedCurrency.llCam$,
-            llIns$: roundedCurrency.llIns$,
-            llOther$: roundedCurrency.llOther$,
+            llTaxes$: currency.llTaxes$,
+            llCam$: currency.llCam$,
+            llIns$: currency.llIns$,
+            llOther$: currency.llOther$,
 
-            tenantMgmt$: roundedCurrency.tenantMgmt$,
-            llMgmt$: roundedCurrency.llMgmt$,
+            tenantMgmt$: currency.tenantMgmt$,
+            llMgmt$: currency.llMgmt$,
 
             tiOutlayThisPeriod: 0,
             lcOutlayThisPeriod: 0,
 
-            customItems: customItemsRounded,
+            customItems: customItemsExact,
 
             // annualized contract fields
-            contractMgmtAnnualPSF: round4(contractMgmtAnnualPSF),
-            contractNetAnnualPSF: round4(baseMonthlyPSF * 12),
-            contractTaxesAnnualPSF: round4(tenTxMo * 12),
-            contractCamAnnualPSF: round4(tenCamMo * 12),
-            contractInsAnnualPSF: round4(tenInsMo * 12)
+            contractMgmtAnnualPSF: contractMgmtAnnualPSF,
+            contractNetAnnualPSF: baseMonthlyPSF * 12,
+            contractTaxesAnnualPSF: tenTxMo * 12,
+            contractCamAnnualPSF: tenCamMo * 12,
+            contractInsAnnualPSF: tenInsMo * 12
           };
 
           // PSF bundles (what the tables/renderers read)
           row.tenPSF = {
-            net: round4((row.isGrossAbated ? 0 : baseMonthlyPSF) * 12),
-            taxes: round4((row.isGrossAbated ? 0 : tenTxMo) * 12),
-            cam: round4((row.isGrossAbated ? 0 : tenCamMo) * 12),
-            ins: round4((row.isGrossAbated ? 0 : tenInsMo) * 12),
-            other: round4((row.isGrossAbated ? 0 : otherTenantMoPSF) * 12),
-            mgmt: round4((row.isGrossAbated ? 0 : tenantMgmtMoPSF) * 12),
-            gross: round4((row.isGrossAbated ? 0 : tenGrossMoPSF) * 12)
+            net: (row.isGrossAbated ? 0 : baseMonthlyPSF) * 12,
+            taxes: (row.isGrossAbated ? 0 : tenTxMo) * 12,
+            cam: (row.isGrossAbated ? 0 : tenCamMo) * 12,
+            ins: (row.isGrossAbated ? 0 : tenInsMo) * 12,
+            other: (row.isGrossAbated ? 0 : otherTenantMoPSF) * 12,
+            mgmt: (row.isGrossAbated ? 0 : tenantMgmtMoPSF) * 12,
+            gross: (row.isGrossAbated ? 0 : tenGrossMoPSF) * 12
           };
 
           row.llPSF = {
-            taxes: round4(llTxMo * 12),
-            cam: round4(llCamMo * 12),
-            ins: round4(llInsMo * 12),
-            other: round4(otherLLMoPSF * 12)
+            taxes: llTxMo * 12,
+            cam: llCamMo * 12,
+            ins: llInsMo * 12,
+            other: otherLLMoPSF * 12
           };
 
-          row.otherPSF = round4(row.tenPSF.other + row.llPSF.other);
-          row.otherMonthly$Tenant = roundedCurrency.tenantOther$;
-          row.otherMonthly$LL = roundedCurrency.llOther$;
+          row.otherPSF = row.tenPSF.other + row.llPSF.other;
+          row.otherMonthly$Tenant = currency.tenantOther$;
+          row.otherMonthly$LL = currency.llOther$;
 
           totalOtherAnnualPSF += row.otherPSF;
 
@@ -2404,7 +2385,7 @@ window.addEventListener('load', initMap);
               'tenantTaxes$', 'tenantCam$', 'tenantIns$', 'tenantOther$',
               'llTaxes$', 'llCam$', 'llIns$', 'llOther$', 'tenantMgmt$', 'llMgmt$'
             ].forEach(key => warnIfFormatted(`row.${key}`, row[key]));
-            customItemsRounded.forEach((item, idx) => {
+            customItemsExact.forEach((item, idx) => {
               warnIfFormatted(`customItems[${idx}].tenantDollars`, item.tenantDollars);
               warnIfFormatted(`customItems[${idx}].landlordDollars`, item.landlordDollars);
             });
@@ -2413,34 +2394,12 @@ window.addEventListener('load', initMap);
           schedule.push(row);
         }
   
-        roundingAdjustments = Object.entries(roundingSumsByYear).reduce((acc, [year, metrics]) => {
-          const entry = { year: Number(year) };
-          let hasDelta = false;
-          Object.entries(metrics).forEach(([key, pair]) => {
-            const delta = round2((pair.rounded || 0) - (pair.raw || 0));
-            if (Math.abs(delta) >= 0.01) {
-              entry[`${key}Delta`] = delta;
-              hasDelta = true;
-              if (devGuardsEnabled) {
-                console.warn(`[RoundingGuard] Rounding delta year ${year} (${key}): ${delta.toFixed(2)}`);
-              }
-            }
-          });
-          if (hasDelta) acc.push(entry);
-          return acc;
-        }, []);
-
         hasOtherOpEx = totalOtherAnnualPSF > 0;
 
-        totalPaidNet = round2(totalPaidNet);
-        totalPaidGross = round2(totalPaidGross);
-        totalLLOpex = round2(totalLLOpex);
-        pvRent = round2(pvRent);
-        pvRentNet = round2(pvRentNet);
-        pvLLOpex = round2(pvLLOpex);
-        freeGrossNominal = round2(freeGrossNominal);
-        freeGrossPV = round2(freeGrossPV);
-        tenantOpExNominal = round2(tenantOpExNominal);
+        pvRent = pvFromExact(monthlyGrossCash, rMonthly, pvStartOffset);
+        pvRentNet = pvFromExact(monthlyNetCash, rMonthly, pvStartOffset);
+        pvLLOpex = pvFromExact(monthlyLLOpexCash, rMonthly, pvStartOffset);
+        freeGrossPV = pvFromExact(monthlyFreeGross, rMonthly, pvStartOffset);
 
         // -----------------------------------------------------------------------
         // Cash-flow comparison helpers (Landlord Free TI / Allowance lines)
@@ -2497,12 +2456,12 @@ window.addEventListener('load', initMap);
           const paidBase = (+row.preBase$ || 0) - (+row.freeBase$ || 0);
           totalBaseRentNominal += paidBase;
         });
-        totalBaseRentNominal = round2(totalBaseRentNominal);
+        // exact-first: keep full precision; defer rounding to display
+        // totalBaseRentNominal remains as-is
 
         const safeNum = (n) => (Number.isFinite(n) ? n : 0);
         const kpis = buildKpis({
           schedule,
-          roundingAdjustments,
           termMonths: term,
           totalNetRent: safeNum(totalPaidNet),
           totalGrossRent: safeNum(totalPaidGross),
@@ -2834,8 +2793,7 @@ window.addEventListener('load', initMap);
           lastMonthRent: lastMonthGross,
           peakMonthly: peakMonthlyGross,
           summaryChips: leaseTiming?.chips || [],
-          topline: kpis,
-          roundingAdjustments
+          topline: kpis
         };
 
         model.toplineKpis = kpis;
@@ -3735,7 +3693,7 @@ window.addEventListener('load', initMap);
           const id = el.id;
           if (!id) return;
           if (seenIds.has(id)) {
-            console.warn(`[RoundingGuard] Duplicate id detected: #${id}`);
+            console.warn(`[ExactGuard] Duplicate id detected: #${id}`);
           } else {
             seenIds.add(id);
           }
