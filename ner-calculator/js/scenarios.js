@@ -98,6 +98,18 @@ const fmtUSD0p = (n) => { // parentheses for negatives
   return n < 0 ? `(${s})` : s;
 };
 
+const formattingAPI = window.NERFormatting || {};
+const displayCurrency = typeof formattingAPI.formatCurrency === 'function'
+  ? formattingAPI.formatCurrency
+  : (value) => (Number.isFinite(Number(value))
+    ? Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—');
+const displayPSF = typeof formattingAPI.formatPSF === 'function'
+  ? formattingAPI.formatPSF
+  : (value) => (Number.isFinite(Number(value))
+    ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}/SF`
+    : '—');
+
 function ymToDateStr(isoYM) {
   try { return new Date(`${isoYM}-01`).toLocaleString(undefined, { month: 'short', year: 'numeric' }); }
   catch (_) { return '—'; }
@@ -186,17 +198,8 @@ function tiTreatment(model){
 }
 
 // ====== FORMATTER FALLBACKS (use existing if they exist) ======
-const _fmtMoney = (typeof fmtMoney === 'function') ? fmtMoney : (v) => {
-  if (v == null || Number.isNaN(v)) return '—';
-  const num = Number(v);
-  const neg = num < 0;
-  const abs = Math.abs(num).toLocaleString(undefined, { maximumFractionDigits: 0 });
-  return neg ? `($${abs})` : `$${abs}`;
-};
-const _fmtPSF = (typeof fmtPSF === 'function') ? fmtPSF : (v) => {
-  if (v == null || Number.isNaN(v)) return '—';
-  return `$${Number(v).toFixed(2)}`;
-};
+const _fmtMoney = (typeof fmtMoney === 'function') ? fmtMoney : (v) => displayCurrency(v);
+const _fmtPSF = (typeof fmtPSF === 'function') ? fmtPSF : (v) => displayPSF(v);
 const _fmtPct = (typeof fmtPct === 'function') ? fmtPct : (v) => {
   if (v == null || Number.isNaN(v)) return '—';
   return `${Number(v).toFixed(1)}%`;

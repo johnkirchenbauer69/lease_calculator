@@ -20,7 +20,19 @@
 /** Chart pack expects window.__ner_last; renders 5 analysis charts and provides PNG capture. */
 (function () {
   // ---- Helpers -------------------------------------------------------------
-  const fmtUSD = n => (isFinite(n) ? n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 }) : "—");
+  const formattingAPI = window.NERFormatting || {};
+  const formatCurrency = typeof formattingAPI.formatCurrency === 'function'
+    ? formattingAPI.formatCurrency
+    : (value) => (Number.isFinite(Number(value))
+      ? Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '—');
+  const formatPSF = typeof formattingAPI.formatPSF === 'function'
+    ? formattingAPI.formatPSF
+    : (value) => (Number.isFinite(Number(value))
+      ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}/SF`
+      : '—');
+
+  const fmtUSD = (n) => formatCurrency(n);
   const clamp  = (x) => Math.max(0, Math.min(1, x));
   const by    = (k) => (a,b) => (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0);
 
@@ -528,7 +540,7 @@ _renderPSFTrend(model) {
 
       const data = {
         labels: pairs.map(p=>p.l),
-        datasets:[{ label:'Δ NER (PV)  $/SF/yr', data: pairs.map(p=>+p.e.toFixed(2)), backgroundColor: this.theme.base }]
+        datasets:[{ label:'Δ NER (PV)  $/SF/yr', data: pairs.map(p=>p.e), backgroundColor: this.theme.base }]
       };
 
       const options = {
