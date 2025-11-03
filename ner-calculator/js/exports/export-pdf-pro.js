@@ -241,12 +241,15 @@ function readScenarios() {
 }
 
 function captureCharts() {
-  const out = {};
+  const out = [];
   for (const id of CHART_IDS) {
     const canvas = document.getElementById(id);
     if (!canvas || typeof canvas.toDataURL !== 'function') continue;
     try {
-      out[id] = canvas.toDataURL('image/png', 1.0);
+      out.push({
+        title: id,
+        image: canvas.toDataURL('image/png', 1.0)
+      });
     } catch (err) {
       console.warn(`Unable to capture chart: ${id}`, err);
     }
