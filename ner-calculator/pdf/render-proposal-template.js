@@ -93,6 +93,14 @@ function renderRentScheduleRows(schedule = []) {
 }
 
 export default function renderProposalTemplate({ deal = {}, scenarios = [], charts = [], branding = {} }) {
+  const normalizedBranding = { ...branding };
+  if (normalizedBranding.logo && normalizedBranding.logoUrl == null) {
+    normalizedBranding.logoUrl = normalizedBranding.logo;
+  }
+  if (normalizedBranding.secondary && normalizedBranding.accent == null) {
+    normalizedBranding.accent = normalizedBranding.secondary;
+  }
+
   const {
     title = 'Lease Proposal',
     subtitle = '',
@@ -105,10 +113,10 @@ export default function renderProposalTemplate({ deal = {}, scenarios = [], char
     highlights = [],
   } = deal;
 
-  const primary = branding.primary ?? '#1434ef';
-  const accent = branding.accent ?? '#f9a13a';
-  const logoUrl = branding.logoUrl ?? '';
-  const footerNote = branding.footerNote ?? '';
+  const primary = normalizedBranding.primary ?? '#1434ef';
+  const accent = normalizedBranding.accent ?? '#f9a13a';
+  const logoUrl = normalizedBranding.logoUrl ?? '';
+  const footerNote = normalizedBranding.footerNote ?? '';
 
   const headlineDate = preparedDate
     ? new Date(preparedDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })

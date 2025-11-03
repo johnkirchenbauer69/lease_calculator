@@ -57,12 +57,33 @@ function captureCharts() {
 
 function collectBranding() {
   const logo = document.querySelector('.brand .logo');
-  const brandTop = document.querySelector('.brand-text .brand-top');
-  const brandBottom = document.querySelector('.brand-text .brand-bottom');
+  const footer = document.querySelector('.site-footer');
+
+  let primary = '';
+  let accent = '';
+
+  try {
+    const rootStyles = window.getComputedStyle(document.documentElement);
+    primary = rootStyles.getPropertyValue('--lee-red')?.trim() || '';
+    if (!primary) {
+      primary = rootStyles.getPropertyValue('--accent')?.trim() || '';
+    }
+
+    accent = rootStyles.getPropertyValue('--accent-2')?.trim() || '';
+    if (!accent) {
+      accent = rootStyles.getPropertyValue('--accent')?.trim() || '';
+    }
+  } catch (err) {
+    console.warn('Unable to read branding colors', err);
+  }
+
+  const footerNote = footer?.textContent?.replace(/\s+/g, ' ')?.trim() || '';
+
   return {
-    logo: logo?.src || '',
-    primary: brandTop?.textContent?.trim() || '',
-    secondary: brandBottom?.textContent?.trim() || ''
+    logoUrl: logo?.src || '',
+    primary,
+    accent,
+    footerNote
   };
 }
 
