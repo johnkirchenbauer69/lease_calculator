@@ -932,6 +932,7 @@
 <button type="button" id="calcBtn" class="btn primary">Calculate</button>
     <button type="button" id="resetBtn" class="btn ghost">Reset</button>
     <button id="exportPdf" class="btn">Export PDF</button>
+    <button type="button" id="exportPdfPro" class="btn">Export Client PDF</button>
     <button id="exportExcel" class="btn">Export Excel</button>
   </div>
 </form>
@@ -1174,6 +1175,8 @@
 <script defer src="js/exports/export-excel.js"></script>
 <!-- Print-to-PDF report builder (tables, KPIs, chart images). -->
 <script defer src="js/exports/export-pdf.js?v=1"></script>
+<!-- Client-ready PDF exporter -->
+<script type="module" src="js/exports/export-pdf-pro.js"></script>
 
 <!-- App (wires the Export button and everything else) -->
 <!-- Core calculator and UI synchronization. -->
