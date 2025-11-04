@@ -107,7 +107,7 @@ const displayCurrency = typeof formattingAPI.formatCurrency === 'function'
 const displayPSF = typeof formattingAPI.formatPSF === 'function'
   ? formattingAPI.formatPSF
   : (value) => (Number.isFinite(Number(value))
-    ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}/SF`
+    ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/SF`
     : '—');
 
 function ymToDateStr(isoYM) {
