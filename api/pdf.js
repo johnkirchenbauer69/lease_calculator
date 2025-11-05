@@ -1,4 +1,4 @@
-import streamProposalPdf from '../ner-calculator/pdf/api-pdf.js';
+import { handler as streamProposalPdf } from './ner-calculator/pdf/api-pdf.js';
 
 export const config = {
   api: {
