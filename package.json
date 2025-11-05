@@ -3,11 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "npx playwright install --with-deps chromium",
+    "start": "node server.js",
     "test": "vitest run",
-    "pdf:test": "node -e \"console.log('Run server and POST to /api/pdf with sample payload')\""
+    "pdf:test": "node -e \"console.log('Run the server and POST to /api/pdf with sample payload')\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "playwright": "^1.43.1"
   },
   "devDependencies": {
-    "vitest": "^1.5.0",
-    "playwright": "^1.43.1"
+    "vitest": "^1.5.0"
   }
 }
