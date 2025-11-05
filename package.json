@@ -1,7 +1,7 @@
 {
   "type": "module",
   "scripts": {
-    "build": "npx playwright install chromium",   // <- no --with-deps
+    "build": "npx playwright install chromium",
     "start": "node server.js",
     "test": "vitest run",
     "pdf:test": "node -e \"console.log('Run the server then POST to /api/pdf')\""
