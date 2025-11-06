@@ -8,6 +8,205 @@ const CHART_IDS = [
   'abatementChart'
 ];
 
+function toFiniteNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function firstFiniteNumber(...values) {
+  for (const value of values) {
+    const num = toFiniteNumber(value);
+    if (num != null) return num;
+  }
+  return null;
+}
+
+function countTermMonths(schedule) {
+  if (!Array.isArray(schedule) || schedule.length === 0) return null;
+  const termMonths = schedule.reduce((count, row) => (row && row.isTermMonth ? count + 1 : count), 0);
+  if (termMonths > 0) return termMonths;
+  return schedule.length;
+}
+
+function collectChips(source) {
+  if (!source) return [];
+  const raw = source.summaryChips;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((chip) => (typeof chip === 'string' ? chip.trim() : ''))
+    .filter((chip) => chip.length > 0);
+}
+
+function deriveScenarioCard(snapshot, index) {
+  const model = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const kpiSource = model.kpis && !Array.isArray(model.kpis) && typeof model.kpis === 'object' ? model.kpis : {};
+  const topline = kpiSource.topline && typeof kpiSource.topline === 'object' ? kpiSource.topline : {};
+  const toplineAlt = model.toplineKpis && typeof model.toplineKpis === 'object' ? model.toplineKpis : {};
+
+  const chipSet = new Set([
+    ...collectChips(kpiSource),
+    ...collectChips(model),
+  ]);
+  const subtitle = chipSet.size ? Array.from(chipSet).join(' • ') : '';
+
+  const summary = typeof model.summary === 'string' && model.summary.trim()
+    ? model.summary.trim()
+    : (typeof kpiSource.summary === 'string' && kpiSource.summary.trim() ? kpiSource.summary.trim() : '');
+
+  const titleCandidates = [
+    model.title,
+    kpiSource.title,
+    model.name,
+    model.propertyName,
+    model.propertyLabel,
+    model.address,
+    model.propertyAddress,
+  ];
+  let title = titleCandidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
+  if (title) {
+    title = title.trim();
+  } else {
+    title = `Scenario ${index + 1}`;
+  }
+
+  const scheduleTerm = countTermMonths(model.schedule);
+
+  const candidateKpis = [
+    {
+      label: 'Term (months)',
+      format: 'number',
+      value: firstFiniteNumber(
+        kpiSource.termMonths,
+        topline.termMonths,
+        toplineAlt.termMonths,
+        model.termMonths,
+        scheduleTerm,
+      ),
+    },
+    {
+      label: 'Free Rent (months)',
+      format: 'number',
+      value: firstFiniteNumber(kpiSource.freeMonths, model.freeMonths),
+    },
+    {
+      label: 'Avg Monthly Net',
+      format: 'currency',
+      value: firstFiniteNumber(
+        topline.avgMonthlyNet,
+        toplineAlt.avgMonthlyNet,
+        kpiSource.avgMonthlyNet,
+        model.avgNetMonthly,
+      ),
+    },
+    {
+      label: 'Avg Monthly Gross',
+      format: 'currency',
+      value: firstFiniteNumber(
+        topline.avgMonthlyGross,
+        toplineAlt.avgMonthlyGross,
+        kpiSource.avgMonthlyGross,
+        model.avgGrossMonthly,
+      ),
+    },
+    {
+      label: 'Total Net Rent',
+      format: 'currency',
+      value: firstFiniteNumber(
+        topline.totalNetRent,
+        toplineAlt.totalNetRent,
+        kpiSource.totalNetRent,
+        model.totalPaidNet,
+      ),
+    },
+    {
+      label: 'Total Gross Rent',
+      format: 'currency',
+      value: firstFiniteNumber(
+        topline.totalGrossRent,
+        toplineAlt.totalGrossRent,
+        kpiSource.totalGrossRent,
+        model.totalPaidGross,
+      ),
+    },
+    {
+      label: 'NER (PV)',
+      format: 'currency',
+      value: firstFiniteNumber(kpiSource.nerPV, model.nerPV),
+    },
+    {
+      label: 'NER (non-PV)',
+      format: 'currency',
+      value: firstFiniteNumber(kpiSource.nerNonPV, model.simpleNet),
+    },
+    {
+      label: 'Free Rent Value',
+      format: 'currency',
+      value: firstFiniteNumber(kpiSource.freeRentValueNominal, kpiSource.freeGrossNominal),
+    },
+    {
+      label: 'TI Allowance',
+      format: 'currency',
+      value: firstFiniteNumber(kpiSource.tiAllowanceTotal, model.tiAllowanceTotal),
+    },
+    {
+      label: 'Pct of Term Abated',
+      format: 'percent',
+      value: firstFiniteNumber(kpiSource.pctAbated),
+    },
+  ];
+
+  const kpis = candidateKpis
+    .filter((item) => item.value != null)
+    .map(({ label, value, format }) => ({ label, value, format }))
+    .slice(0, 6);
+
+  return {
+    title,
+    subtitle,
+    summary,
+    kpis,
+  };
+}
+
+function normalizeScenarioForPdf(snapshot, index) {
+  const model = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const hasArrayKpis = Array.isArray(model.kpis);
+  const derived = deriveScenarioCard(model, index);
+
+  if (!hasArrayKpis) {
+    return derived;
+  }
+
+  const cleanedKpis = model.kpis
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const label = entry.label != null ? String(entry.label) : '';
+      return {
+        label,
+        value: entry.value,
+        format: entry.format,
+      };
+    })
+    .filter(Boolean);
+
+  const title = typeof model.title === 'string' && model.title.trim()
+    ? model.title.trim()
+    : derived.title;
+  const subtitle = typeof model.subtitle === 'string' && model.subtitle.trim()
+    ? model.subtitle.trim()
+    : derived.subtitle;
+  const summary = typeof model.summary === 'string' && model.summary.trim()
+    ? model.summary.trim()
+    : derived.summary;
+
+  return {
+    title,
+    subtitle,
+    summary,
+    kpis: cleanedKpis.length ? cleanedKpis : derived.kpis,
+  };
+}
+
 function onReady(fn) {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -105,9 +304,12 @@ async function exportPdf() {
       return;
     }
 
+    const rawScenarios = readScenarios();
+    const scenarios = rawScenarios.map((scenario, index) => normalizeScenarioForPdf(scenario, index));
+
     const payload = {
       deal,
-      scenarios: readScenarios(),
+      scenarios,
       charts: captureCharts(),
       branding: collectBranding()
     };
