@@ -120,10 +120,23 @@ async function exportPdf() {
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      throw new Error(`Export failed (${response.status})`);
+    const res = await fetch('/api/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(()=> '');
+      alert(`Export failed (${res.status}). ${txt.slice(0,300)}`);
+      return;
     }
-
+    const ctype = (res.headers.get('content-type') || '').toLowerCase();
+    if (!ctype.includes('application/pdf')) {
+      const txt = await res.text().catch(()=> '');
+      alert(`Export returned non-PDF (${ctype}). ${txt.slice(0,300)}`);
+      return;
+    }
+    
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
