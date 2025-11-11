@@ -1,4 +1,6 @@
 {
+  "name": "lease_calculator",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "build": "npx playwright install chromium",
