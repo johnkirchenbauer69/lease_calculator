@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { renderProposalTemplate } from './render-proposal-template.js';
+import renderProposalTemplate from './render-proposal-template.js';
 
 export default async function handler(req, res) {
   const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
