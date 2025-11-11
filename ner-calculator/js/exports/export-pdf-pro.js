@@ -49,7 +49,7 @@ function captureCharts() {
     try {
       out.push({
         title: id,
-        image: canvas.toDataURL('image/png', 1.0)
+        image: canvas.toDataURL('image/jpeg', 0.85) // smaller than PNG
       });
     } catch (err) {
       console.warn(`Unable to capture chart: ${id}`, err);
@@ -93,67 +93,54 @@ function collectBranding() {
 async function exportPdf() {
   const btn = document.getElementById(BUTTON_ID);
   const activeText = btn?.textContent;
+
   try {
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Preparing…';
-    }
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
 
     const deal = ensureModel();
-    if (!deal) {
-      alert('Please run Calculate before exporting.');
-      return;
-    }
+    if (!deal) { alert('Please run Calculate before exporting.'); return; }
 
     const payload = {
       deal,
       scenarios: readScenarios(),
-      charts: captureCharts(),
+      charts: captureCharts(),       // consider JPEG to shrink: see note below
       branding: collectBranding()
     };
-
-    const response = await fetch('/api/pdf', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
 
     const res = await fetch('/api/pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
+
     if (!res.ok) {
-      const txt = await res.text().catch(()=> '');
+      const txt = await res.text().catch(() => '');
       alert(`Export failed (${res.status}). ${txt.slice(0,300)}`);
       return;
     }
+
     const ctype = (res.headers.get('content-type') || '').toLowerCase();
     if (!ctype.includes('application/pdf')) {
-      const txt = await res.text().catch(()=> '');
+      const txt = await res.text().catch(() => '');
       alert(`Export returned non-PDF (${ctype}). ${txt.slice(0,300)}`);
       return;
     }
-    
-    const blob = await response.blob();
+
+    const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'Lease_Proposal_Comparison.pdf';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Lease_Proposal_Comparison.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     URL.revokeObjectURL(url);
+
   } catch (err) {
     console.error('Failed to export client PDF', err);
-    alert('Unable to export PDF. Please try again.');
+    alert(`Unable to export PDF. ${err?.message || ''}`.trim());
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = activeText || 'Export Client PDF';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = activeText || 'Export Client PDF'; }
   }
 }
 
