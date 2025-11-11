@@ -4,14 +4,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "vitest run",
-    "pdf:test": "node -e \"console.log('Run the server then POST to /api/pdf')\""
+    "postinstall": "npx playwright install chromium"
   },
   "dependencies": {
     "express": "^4.19.2",
     "playwright": "^1.43.1"
-  },
-  "devDependencies": {
-    "vitest": "^1.5.0"
   }
 }
