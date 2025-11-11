@@ -2,37 +2,31 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-
-// This is your Playwright handler that returns a PDF
 import streamProposalPdf from './ner-calculator/pdf/api-pdf.js';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname  = path.dirname(__filename);
+const staticDir  = path.join(__dirname, 'ner-calculator');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// PDF endpoint
-app.post('/api/pdf', (req, res) => {
-  try {
-    return streamProposalPdf(req, res);
-  } catch (e) {
-    console.error('PDF error', e);
-    res.status(500).send(String(e?.stack || e));
-  }
-});
+// API
+app.post('/api/pdf', (req, res) => streamProposalPdf(req, res));
 
-// Serve the calculator front-end
-const staticDir = path.join(__dirname, 'ner-calculator');
-app.use(express.static(staticDir));
+// Serve static at BOTH roots so /js/... and /ner-calculator/js/... resolve
+app.use('/ner-calculator', express.static(staticDir));
+app.use('/',              express.static(staticDir));
 
-// Default route -> index.html
-app.get('/', (_req, res) => {
+// SPA entry
+app.get(['/', '/index.html'], (_req, res) => {
   res.sendFile(path.join(staticDir, 'index.html'));
 });
 
-// Optional health check
-app.get('/healthz', (_req, res) => res.type('text').send('ok'));
+// optional SPA fallback for hash/history routes
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(staticDir, 'index.html'));
+});
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
+app.listen(port, () => console.log(`Server running on :${port}`));
