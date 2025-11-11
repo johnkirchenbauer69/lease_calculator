@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "postinstall": "npx playwright install chromium"
+    "prestart": "npx playwright install chromium",
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
