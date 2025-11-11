@@ -27,19 +27,22 @@ const staticDir  = path.join(__dirname, 'ner-calculator');
 
 const app = express();
 
-// Increase body limits for photos/charts; accept JSON & form bodies
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ limit: '25mb', extended: true }));
+// allow big JSON (photos + charts)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// PDF endpoint with robust error logging
-app.post('/api/pdf', async (req, res) => {
-  const size = Buffer.byteLength(JSON.stringify(req.body || {}), 'utf8');
-  console.log(`[pdf] payload ~${Math.round(size/1024)}KB, scenarios=${(req.body?.scenarios||[]).length}, charts=${Array.isArray(req.body?.charts) ? req.body.charts.length : Object.keys(req.body?.charts||{}).length}`);
+// health: prove Playwright can make any PDF
+app.get('/api/pdf/health', async (_req, res) => {
   try {
-    await streamProposalPdf(req, res); // will set headers & send PDF
-  } catch (err) {
-    console.error('[pdf] handler error:', err);
-    res.status(500).type('text/plain').send(String(err?.stack || err));
+    const browser = await chromium.launch({ headless:true, args:['--no-sandbox','--disable-dev-shm-usage'] });
+    const page = await browser.newPage();
+    await page.setContent('<h1>PDF OK</h1>');
+    const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+    await browser.close();
+    res.type('application/pdf').send(Buffer.from(pdf));
+  } catch (e) {
+    console.error('[pdf/health] error:', e);
+    res.status(500).type('text/plain').send(String(e?.stack || e));
   }
 });
 
