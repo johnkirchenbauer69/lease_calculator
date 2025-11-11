@@ -3,7 +3,23 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import streamProposalPdf from './ner-calculator/pdf/api-pdf.js';
-import { chromium } from 'playwright'; // for /api/pdf/health
+import { chromium } from 'playwright'; // or from puppeteer-core variant below
+
+app.get('/api/pdf/health', async (_req, res) => {
+  try {
+    const browser = await chromium.launch({
+      args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']
+    });
+    const page = await browser.newPage();
+    await page.setContent('<html><body><h1>PDF OK</h1></body></html>', { waitUntil: 'domcontentloaded' });
+    const pdf = await page.pdf({ printBackground: true, preferCSSPageSize: true });
+    await browser.close();
+    res.status(200).type('application/pdf').send(Buffer.from(pdf));
+  } catch (e) {
+    console.error('[pdf/health] error:', e);
+    res.status(500).type('text/plain').send(String(e?.stack || e));
+  }
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
