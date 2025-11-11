@@ -7,23 +7,25 @@ export default async function handler(req, res) {
   try {
     const html = renderProposalTemplate(payload);
 
-    // critical for Render
+    // In the Docker image this usually works even without flags,
+    // but these are safe to keep.
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']
+      args: ['--no-sandbox', '--disable-dev-shm-usage']
     });
 
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(200); // small settle
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    await page.emulateMedia({ media: 'print' });
+
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: '0.5in', right: '0.5in', bottom: '0.6in', left: '0.5in' }
     });
 
-    res.setHeader('Content-Type','application/pdf');
-    res.setHeader('Content-Disposition','inline; filename="Lease_Proposal_Comparison.pdf"');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="Lease_Proposal_Comparison.pdf"');
     res.status(200).send(Buffer.from(pdf));
   } catch (err) {
     console.error('[api/pdf] error:', err);
