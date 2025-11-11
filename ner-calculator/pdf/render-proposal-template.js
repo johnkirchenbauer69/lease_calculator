@@ -92,7 +92,7 @@ function renderRentScheduleRows(schedule = []) {
   }).join('');
 }
 
-export default function renderProposalTemplate({ deal = {}, scenarios = [], charts = [], branding = {} }) {
+export function renderProposalTemplate({ deal, scenarios = [], charts = [], branding = {} }) {
   const normalizedBranding = { ...branding };
   if (normalizedBranding.logo && normalizedBranding.logoUrl == null) {
     normalizedBranding.logoUrl = normalizedBranding.logo;
