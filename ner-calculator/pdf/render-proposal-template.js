@@ -14,6 +14,48 @@ const percentFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 });
 
+const KPI_FIELD_MAP = {
+  termMonths: { label: 'Term (months)', format: 'number' },
+  freeMonths: { label: 'Free Months', format: 'number' },
+  startNetAnnualPSF: { label: 'Start Net Rent ($/SF/yr)', format: 'number' },
+  escalationPct: { label: 'Escalation', format: 'percent' },
+  totalBaseRentNominal: { label: 'Total Base Rent', format: 'currency' },
+  totalNetRent: { label: 'Total Net Rent', format: 'currency' },
+  totalGrossRent: { label: 'Total Gross Rent', format: 'currency' },
+  totalRecoveries: { label: 'Total Recoveries', format: 'currency' },
+  totalOpex: { label: 'Total Operating Expenses', format: 'currency' },
+  avgMonthlyNet: { label: 'Average Monthly Net Rent', format: 'currency' },
+  avgMonthlyGross: { label: 'Average Monthly Gross Rent', format: 'currency' },
+  avgMonthlySpread: { label: 'Gross–Net Spread', format: 'currency' },
+  freeGrossPV: { label: 'Free Rent (PV)', format: 'currency' },
+  freeGrossNominal: { label: 'Free Rent (Nominal)', format: 'currency' },
+  pctAbated: { label: 'Percent of Term Abated', format: 'percent' },
+  recoveryRatio: { label: 'Recovery Ratio', format: 'percent' },
+  commissionPV: { label: 'Commission (PV)', format: 'currency' },
+  commissionNominal: { label: 'Commission (Nominal)', format: 'currency' },
+  commissionTotal: { label: 'Total Commission', format: 'currency' },
+  llCashOutPV: { label: 'LL Cash Outlay (PV)', format: 'currency' },
+  tiAppliedPV: { label: 'TI Applied (PV)', format: 'currency' },
+  tiOfferPV: { label: 'TI Offer (PV)', format: 'currency' },
+  llAllowanceApplied: { label: 'LL Allowance Applied', format: 'currency' },
+  llAllowanceOffered: { label: 'LL Allowance Offered', format: 'currency' },
+  tiAmortPmt: { label: 'TI Amortization Payment', format: 'currency' },
+  tenantContribution: { label: 'Tenant Contribution', format: 'currency' },
+  totalIncentivePV: { label: 'Total Incentive Value (PV)', format: 'currency' },
+  llFreeTIY0: { label: 'LL Free TI (Y0)', format: 'currency' },
+  llFinancedTIY0: { label: 'LL Financed TI (Y0)', format: 'currency' },
+  totalCapex: { label: 'Total CapEx', format: 'currency' },
+  netTenantCashAtPos: { label: 'Net Tenant Cash at Possession', format: 'currency' },
+  nerPV: { label: 'NER (PV)', format: 'currency' },
+  nerNonPV: { label: 'NER (non-PV)', format: 'currency' },
+  firstMonthRent: { label: 'First Month Rent', format: 'currency' },
+  lastMonthRent: { label: 'Last Month Rent', format: 'currency' },
+  peakMonthly: { label: 'Peak Monthly Rent', format: 'currency' },
+  opexStartPSF: { label: 'OpEx Start ($/SF/yr)', format: 'number' },
+  opexEscalationPct: { label: 'OpEx Escalation', format: 'percent' },
+  occPSFmo: { label: 'All-in Occupancy ($/SF/mo)', format: 'number' },
+};
+
 function formatValue(value, format) {
   if (value == null) return '—';
   switch (format) {
@@ -31,13 +73,55 @@ function formatValue(value, format) {
   }
 }
 
+function humanizeKey(key = '') {
+  return key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .replace(/^\w|\s\w/g, (txt) => txt.toUpperCase());
+}
+
+function normalizeScenarioKpis(scenario) {
+  const raw = scenario?.kpis;
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+
+  const topline = raw.topline && typeof raw.topline === 'object' && !Array.isArray(raw.topline)
+    ? raw.topline
+    : raw;
+
+  let rows = [];
+  if (Array.isArray(topline)) {
+    rows = topline;
+  } else {
+    rows = Object.entries(topline || {})
+      .map(([key, value]) => {
+        if (value == null || value === '') return null;
+        const meta = KPI_FIELD_MAP[key] || {};
+        const label = meta.label || humanizeKey(key);
+        const format = meta.format || (typeof value === 'number' ? 'number' : undefined);
+        return { label, value, format };
+      })
+      .filter(Boolean);
+  }
+
+  const chips = Array.isArray(raw.summaryChips)
+    ? raw.summaryChips
+        .filter(Boolean)
+        .map((chip) => ({ label: String(chip), value: '', format: 'text' }))
+    : [];
+
+  return [...rows, ...chips];
+}
+
 function renderScenarioCard(scenario, index) {
   const {
     title = `Scenario ${index + 1}`,
     subtitle = '',
     summary = '',
-    kpis = [],
   } = scenario ?? {};
+
+  const kpis = normalizeScenarioKpis(scenario);
 
   const kpiRows = kpis.map((kpi) => {
     const { label, value, format } = kpi;
