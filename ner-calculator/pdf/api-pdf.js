@@ -2,13 +2,15 @@ import { chromium } from 'playwright';
 import renderProposalTemplate from './render-proposal-template.js';
 
 export default async function streamProposalPdf(req, res) {
-  const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-  let browser;
+  let payload = req.body || {};
+  try {
+    if (typeof payload === 'string') payload = JSON.parse(payload);
+  } catch (_) { /* ignore; leave payload as-is */ }
 
+  let browser;
   try {
     const html = renderProposalTemplate(payload);
 
-    // Render-friendly launch flags
     browser = await chromium.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
@@ -16,6 +18,7 @@ export default async function streamProposalPdf(req, res) {
 
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 3000 }); // optional
     await page.emulateMedia({ media: 'print' });
 
     const pdf = await page.pdf({
@@ -25,7 +28,7 @@ export default async function streamProposalPdf(req, res) {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename=\"Lease_Proposal_Comparison.pdf\"');
+    res.setHeader('Content-Disposition', 'inline; filename="Lease_Proposal_Comparison.pdf"');
     res.status(200).send(Buffer.from(pdf));
   } catch (err) {
     console.error('[api/pdf] error:', err);
@@ -34,3 +37,4 @@ export default async function streamProposalPdf(req, res) {
     try { if (browser) await browser.close(); } catch {}
   }
 }
+
