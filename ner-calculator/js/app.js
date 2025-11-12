@@ -1627,9 +1627,25 @@ window.addEventListener('load', initMap);
     })();
   
     // ------------------------------- Calculate / Reset --------------------------
+    const CALC_CLICK_WINDOW_MS = 2000;
+
+    function wasCalcJustClicked(windowMs = CALC_CLICK_WINDOW_MS) {
+      const ts = window.__calcClickedAt;
+      if (!Number.isFinite(ts)) return false;
+      const now = Date.now();
+      const recent = (now - ts) <= windowMs;
+      if (!recent) delete window.__calcClickedAt;
+      return recent;
+    }
+
     document.getElementById('calcBtn')?.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      const timestamp = Date.now();
+      window.__calcClickedAt = timestamp;
+      window.setTimeout(() => {
+        if (window.__calcClickedAt === timestamp) delete window.__calcClickedAt;
+      }, CALC_CLICK_WINDOW_MS);
       calculate();
       $('.panel-results')?.scrollIntoView({ behavior: 'smooth' });
     });
