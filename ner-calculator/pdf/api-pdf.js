@@ -24,7 +24,22 @@ export default async function streamProposalPdf(req, res) {
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,
-      margin: { top: '0.5in', right: '0.5in', bottom: '0.6in', left: '0.5in' }
+      margin: { top: '0.8in', right: '0.5in', bottom: '0.6in', left: '0.5in' },
+      displayHeaderFooter: true,
+      headerTemplate: `
+        <style>
+          section{font:10px Inter,Arial,sans-serif;color:#6b7280;padding:0 24px;width:100%;}
+          .brand{opacity:.75}
+        </style>
+        <section><span class="brand">${(payload?.deal?.propertyName || 'Lease Proposal')}</span></section>
+      `,
+      footerTemplate: `
+        <style>
+          section{font:10px Inter,Arial,sans-serif;color:#6b7280;padding:0 24px;width:100%;
+                  display:flex;justify-content:flex-end}
+        </style>
+        <section>Page <span class="pageNumber"></span> of <span class="totalPages"></span></section>
+      `
     });
 
     res.setHeader('Content-Type', 'application/pdf');
