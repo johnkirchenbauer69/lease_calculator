@@ -3836,6 +3836,26 @@ a[aria-disabled="true"],
   letter-spacing:.2px;
 }
 
+@page { size: Letter; margin: 0; }
+/* make print colors exact */
+@media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+
+.page{break-after:page; page-break-after:always; min-height:100vh;
+      display:flex; flex-direction:column; gap:24px; padding:0.65in 0.5in 0.75in}
+
+/* Brand system */
+:root{ --primary:${primary}; --accent:${accent}; --ink:#111827; --muted:#6b7280; --panel:#fff; }
+.brand-bar{ background:var(--primary); }
+.pill{ background:var(--accent); }
+table.rent-schedule thead{ background:var(--primary); color:#fff; }
+
+/* Charts as a fixed 2x2 grid per page */
+.chart-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+
+/* Rent schedule: repeat header + don't split rows */
+table.rent-schedule thead{ display:table-header-group; }
+table.rent-schedule tr{ break-inside:avoid; page-break-inside:avoid; }
+
 .comparison-summary .summary-grid .group-row:first-of-type .section-header-bar {
   margin-top:0;
 }
