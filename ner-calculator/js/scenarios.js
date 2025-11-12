@@ -33,6 +33,8 @@ const SCN_KEY = 'ner_scenarios_v2';
 const RING_INDEX_KEY = 'ner_compare_ring_idx';
 const AUTO_ADD_STALE_MS = 4000;
 
+let lastAutoAddTimestamp = null;
+
 let _memStore = Array(MAX_SLOTS).fill(null);
 let _lastAutoSlotIndex = (() => {
   try {
@@ -101,12 +103,15 @@ function snapshotFromModel(model) {
 }
 
 function autoAddScenarioFromModel(model) {
+  const stamp = Number(model?.__inputs?.timestamp);
+  if (!Number.isFinite(stamp) || stamp === lastAutoAddTimestamp) return null;
   const snap = snapshotFromModel(model);
   if (!snap) return null;
   const store = Array.from(getStore());
   const slot = pickNextSlot(store);
   store[slot] = snap;
   setStore(store);
+  lastAutoAddTimestamp = stamp;
   renderCompareGrid();
   flashPinned(slot, 'Saved ✓');
   return slot;
@@ -175,6 +180,7 @@ function resetAutoAddIntent() {
   if ('__ner_compare_auto_add_programmatic' in window) {
     window.__ner_compare_auto_add_programmatic = false;
   }
+  lastAutoAddTimestamp = null;
 }
 
 /* ---------- count helpers + title ---------------------------------------- */
