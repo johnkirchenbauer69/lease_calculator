@@ -7,6 +7,7 @@
     // ------------------------------- Config / State -------------------------------
     let activeView = "monthly";            // "monthly" | "annual" | "monthly+subtotals"
     let activePerspective = "landlord";    // "landlord" | "tenant"
+    let suppressNextInputCapture = false;
   
     const formattingAPI = window.NERFormatting || {};
     const formatCurrency = typeof formattingAPI.formatCurrency === 'function'
@@ -1621,11 +1622,225 @@ window.addEventListener('load', initMap);
       }
       escUnit?.addEventListener('change', syncEscUI);
       syncEscUI();
-  
+
       // formatters on blur (uses your existing formatOnBlur)
       qa('input[data-format]').forEach(i => i.addEventListener('blur', formatOnBlur));
     })();
-  
+
+    const escapeAttrValue = (name) => {
+      if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+        return CSS.escape(name);
+      }
+      return name.replace(/"/g, '\\"');
+    };
+
+    function captureModelInputs({ customExpenses = [], capexRows = [] } = {}) {
+      const form = document.getElementById('ner-form');
+      const elements = form ? Array.from(form.elements || []) : [];
+      const fields = {};
+
+      elements.forEach(el => {
+        if (!el) return;
+        const tag = (el.tagName || '').toLowerCase();
+        const type = (el.type || '').toLowerCase();
+        if (type === 'button' || type === 'submit' || type === 'reset') return;
+        const key = el.id || el.name;
+        if (!key) return;
+        const origin = el.id ? 'id' : 'name';
+
+        if (type === 'radio') {
+          const prev = fields[key];
+          if (!prev) fields[key] = { type: 'radio', value: null, origin };
+          if (el.checked) fields[key] = { type: 'radio', value: el.value, origin };
+          return;
+        }
+
+        if (type === 'checkbox') {
+          fields[key] = { type: 'checkbox', value: !!el.checked, origin };
+          return;
+        }
+
+        if (tag === 'select' && el.multiple) {
+          const values = Array.from(el.selectedOptions || []).map(opt => opt.value);
+          fields[key] = { type: 'multi', value: values, origin };
+          return;
+        }
+
+        fields[key] = { type: 'value', value: el.value ?? '', origin };
+      });
+
+      const cloneCustom = Array.isArray(customExpenses)
+        ? customExpenses.map(row => ({
+            label: row?.label ?? '',
+            rate: row?.rate ?? 0,
+            growth: row?.growth ?? 0,
+            unit: row?.unit ?? 'pct',
+            mode: row?.mode ?? 'tenant',
+            base: row?.base ?? null,
+            stopType: row?.stopType ?? 'base',
+            fixedStop: row?.fixedStop ?? null
+          }))
+        : [];
+
+      const cloneCapex = Array.isArray(capexRows)
+        ? capexRows.map(row => ({
+            mode: row?.mode ?? 'psf',
+            amount: row?.amount ?? 0,
+            total: row?.total ?? 0
+          }))
+        : [];
+
+      const shouldStamp = !suppressNextInputCapture;
+      suppressNextInputCapture = false;
+
+      const inputs = {
+        fields,
+        customExpenses: cloneCustom,
+        capexRows: cloneCapex,
+        perspective: activePerspective,
+        view: activeView
+      };
+
+      if (shouldStamp) inputs.timestamp = Date.now();
+
+      return inputs;
+    }
+
+    function applyModelToForm(modelLike) {
+      const inputs = modelLike?.__inputs;
+      if (!inputs || typeof inputs !== 'object') return false;
+
+      const form = document.getElementById('ner-form');
+      if (!form) return false;
+
+      suppressNextInputCapture = true;
+
+      const applyField = (key, meta = {}) => {
+        if (!key || !meta) return;
+        const { type, value, origin } = meta;
+
+        if (type === 'radio') {
+          const name = origin === 'name'
+            ? key
+            : (document.getElementById(key)?.name || key);
+          const radios = Array.from(form.querySelectorAll(`input[type="radio"][name="${escapeAttrValue(name)}"]`));
+          if (!radios.length) return;
+          let matched = false;
+          radios.forEach(radio => {
+            const shouldCheck = value != null && radio.value === value;
+            radio.checked = shouldCheck;
+            if (shouldCheck) matched = true;
+          });
+          if (!matched && value == null) {
+            radios.forEach(radio => { radio.checked = false; });
+          }
+          return;
+        }
+
+        let el = null;
+        if (origin === 'id') el = document.getElementById(key);
+        if (!el && origin === 'name') {
+          const nodes = Array.from(form.querySelectorAll(`[name="${escapeAttrValue(key)}"]`));
+          el = nodes.find(node => node.type !== 'radio') || nodes[0] || null;
+        }
+        if (!el && key) {
+          el = document.getElementById(key) || form.elements?.namedItem?.(key);
+          if (el && typeof el.length === 'number' && el.item) {
+            el = el[0] || null;
+          }
+        }
+        if (!el || el.type === 'radio') return;
+
+        if (type === 'checkbox') {
+          el.checked = !!value;
+          return;
+        }
+
+        if (type === 'multi') {
+          const values = Array.isArray(value) ? value.map(String) : [];
+          Array.from(el.options || []).forEach(opt => {
+            opt.selected = values.includes(opt.value);
+          });
+          return;
+        }
+
+        el.value = value != null ? value : '';
+      };
+
+      const fieldEntries = Object.entries(inputs.fields || {});
+      fieldEntries.forEach(([key, meta]) => applyField(key, meta));
+
+      if (customList) {
+        customList.innerHTML = '';
+        customRowSeq = 0;
+        const expenses = Array.isArray(inputs.customExpenses) ? inputs.customExpenses : [];
+        expenses.forEach(row => {
+          addCustomRow({
+            label: row?.label ?? '',
+            value: row?.rate ?? row?.value ?? 0,
+            growth: row?.growth ?? 0,
+            growthUnit: row?.unit ?? row?.growthUnit ?? 'pct',
+            mode: row?.mode ?? 'tenant',
+            base: row?.base ?? null,
+            stopType: row?.stopType ?? 'base',
+            fixedStop: row?.fixedStop ?? null
+          });
+        });
+      }
+
+      const capexRowsEl = document.getElementById('capexRows');
+      const capexAddBtn = document.getElementById('capexAdd');
+      if (capexRowsEl) {
+        capexRowsEl.innerHTML = '';
+        const rowsData = Array.isArray(inputs.capexRows) ? inputs.capexRows : [];
+        if (!rowsData.length) {
+          if (capexAddBtn) capexAddBtn.click();
+        } else {
+          rowsData.forEach(row => {
+            if (capexAddBtn) capexAddBtn.click();
+            const newRow = capexRowsEl.querySelector('.capex-row:last-of-type') || capexRowsEl.lastElementChild;
+            if (!newRow) return;
+            const modeSel = newRow.querySelector('.capex-entry');
+            if (modeSel && row?.mode) modeSel.value = row.mode;
+            const amtInput = newRow.querySelector('.capex-amount');
+            if (amtInput) amtInput.value = row?.amount ?? '';
+          });
+        }
+      }
+
+      syncIncludes();
+      handleServiceTypeChange();
+      syncEscUI();
+      syncMgmtModeUI();
+      if (typeof updateCommNpvChip === 'function') updateCommNpvChip();
+      recalcCapex();
+
+      return true;
+    }
+
+    window.applyModelToForm = applyModelToForm;
+
+    (function ensureAutoAddGuard() {
+      const guard = (fn) => (typeof fn === 'function'
+        ? function guarded(model, ...args) {
+            if (!model?.__inputs?.timestamp) return;
+            return fn.apply(this, [model, ...args]);
+          }
+        : fn);
+
+      let guarded = guard(window.autoAddScenarioFromModel);
+      try {
+        Object.defineProperty(window, 'autoAddScenarioFromModel', {
+          configurable: true,
+          enumerable: true,
+          get() { return guarded; },
+          set(fn) { guarded = guard(fn); }
+        });
+      } catch (err) {
+        window.autoAddScenarioFromModel = guard(window.autoAddScenarioFromModel);
+      }
+    })();
+
     // ------------------------------- Calculate / Reset --------------------------
     document.getElementById('calcBtn')?.addEventListener('click', (e) => {
       e.preventDefault();
@@ -2797,7 +3012,12 @@ window.addEventListener('load', initMap);
         };
 
         model.toplineKpis = kpis;
-  
+
+        model.__inputs = captureModelInputs({
+          customExpenses: extraOpExRows,
+          capexRows
+        });
+
 
         // update the new KPI cards (function you already defined above)
         updateExtraKpis(model);
@@ -2829,6 +3049,7 @@ window.addEventListener('load', initMap);
         alert('Something went wrong while calculating. Please check inputs.');
       }
     }
+    window.calculate = calculate;
       // Who pays this category across the schedule? (aggregates tenant vs LL)
       function payerLabel(schedule, key) {
         let tenant = 0, ll = 0;

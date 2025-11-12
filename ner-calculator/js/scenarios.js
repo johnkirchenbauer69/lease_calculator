@@ -1015,9 +1015,21 @@ function pinCurrentIntoSlot(i) {
 }
 
 function loadScenarioSlot(i) {
-  const m = getStore()[i]; if (!m) return;
-  emit('ner:scenario-load', { model: m, slot: i });
-  window.__ner_last = JSON.parse(JSON.stringify(m));
+  const stored = getStore()[i];
+  if (!stored) return;
+
+  const scenario = JSON.parse(JSON.stringify(stored));
+  emit('ner:scenario-load', { model: scenario, slot: i });
+
+  const applied = typeof window.applyModelToForm === 'function'
+    ? window.applyModelToForm(scenario)
+    : false;
+
+  if (applied && typeof window.calculate === 'function') {
+    window.calculate();
+  } else {
+    window.__ner_last = scenario;
+  }
 }
 function duplicateScenarioSlot(i) {
   const s = getStore(), m = s[i]; if (!m) return;
