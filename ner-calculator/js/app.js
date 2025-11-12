@@ -1866,6 +1866,9 @@ window.addEventListener('load', initMap);
       window.setTimeout(() => {
         if (window.__calcClickedAt === timestamp) delete window.__calcClickedAt;
       }, CALC_CLICK_WINDOW_MS);
+      if (typeof window.__ner_resetAutoAddGuard === 'function') {
+        window.__ner_resetAutoAddGuard();
+      }
       calculate();
       $('.panel-results')?.scrollIntoView({ behavior: 'smooth' });
     });
