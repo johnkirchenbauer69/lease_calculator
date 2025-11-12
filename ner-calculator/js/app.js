@@ -1858,6 +1858,11 @@ window.addEventListener('load', initMap);
       e.stopPropagation();
       const timestamp = Date.now();
       window.__calcClickedAt = timestamp;
+      const intentMeta = { ts: timestamp, programmatic: false };
+      window.__ner_compare_auto_add_intent = intentMeta;
+      window.__ner_compare_auto_add_programmatic = false;
+      window.__ner_compare_auto_add_click_ts = timestamp;
+      window.__ner_compare_auto_add_ts = timestamp;
       window.setTimeout(() => {
         if (window.__calcClickedAt === timestamp) delete window.__calcClickedAt;
       }, CALC_CLICK_WINDOW_MS);
@@ -1901,6 +1906,26 @@ window.addEventListener('load', initMap);
   
     // ------------------------------- Main Calculate -----------------------------
     function calculate() {
+      const intentMeta = window.__ner_compare_auto_add_intent;
+      const intentObj = (intentMeta && typeof intentMeta === 'object') ? intentMeta : null;
+      const intentTsCandidates = [];
+      if (intentObj) {
+        ['ts', 'timestamp', 'time', 'at', 'clickedAt', 'clickTs']
+          .forEach((prop) => {
+            const val = intentObj[prop];
+            if (Number.isFinite(Number(val))) intentTsCandidates.push(Number(val));
+          });
+      }
+      const clickTs = Number(window.__ner_compare_auto_add_click_ts);
+      if (Number.isFinite(clickTs)) intentTsCandidates.push(clickTs);
+      const intentTs = intentTsCandidates.length ? intentTsCandidates[0] : NaN;
+      const triggeredByClick = (
+        intentObj
+        && intentObj.programmatic === false
+        && Number.isFinite(intentTs)
+        && Math.abs(Date.now() - intentTs) <= CALC_CLICK_WINDOW_MS
+      );
+      window.__ner_compare_auto_add_programmatic = triggeredByClick ? false : true;
       try {
         // -----------------------------------------------------------------------
         // Grab table refs
