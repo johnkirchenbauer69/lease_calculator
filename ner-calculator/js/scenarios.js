@@ -180,6 +180,9 @@ function resetAutoAddIntent() {
   if ('__ner_compare_auto_add_programmatic' in window) {
     window.__ner_compare_auto_add_programmatic = false;
   }
+}
+
+function resetAutoAddGuard() {
   lastAutoAddTimestamp = null;
 }
 
@@ -1831,6 +1834,7 @@ function bootScenarios() {
 
 // Expose for other modules
 window.renderCompareGrid = renderCompareGrid;
+window.__ner_resetAutoAddGuard = resetAutoAddGuard;
 
 // DOM ready
 if (document.readyState === 'loading') {
