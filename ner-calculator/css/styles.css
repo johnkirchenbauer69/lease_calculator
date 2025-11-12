@@ -3526,11 +3526,6 @@ a[aria-disabled="true"],
 .compare-panel {
   width:100%;
 }
-.compare-toolbar .right label[for="compareCount"] {
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
 .compare-section {
   max-width:1600px;
   margin:0 auto;
