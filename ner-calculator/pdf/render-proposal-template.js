@@ -56,6 +56,13 @@ const KPI_FIELD_MAP = {
   occPSFmo: { label: 'All-in Occupancy ($/SF/mo)', format: 'number' },
 };
 
+// group charts into pages of 4
+function chunk(arr = [], size = 4) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 function formatValue(value, format) {
   if (value == null) return '—';
   switch (format) {
