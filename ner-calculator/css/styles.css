@@ -3837,25 +3837,44 @@ a[aria-disabled="true"],
 }
 
 @page { size: Letter; margin: 0; }
-/* make print colors exact */
-@media print { html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
 
-.page{break-after:page; page-break-after:always; min-height:100vh;
-      display:flex; flex-direction:column; gap:24px; padding:0.65in 0.5in 0.75in}
+/* print exact colors only inside the PDF doc */
+@media print {
+  html[data-doc="pdf"],
+  html[data-doc="pdf"] body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
 
-/* Brand system */
-:root{ --primary:${primary}; --accent:${accent}; --ink:#111827; --muted:#6b7280; --panel:#fff; }
-.brand-bar{ background:var(--primary); }
-.pill{ background:var(--accent); }
-table.rent-schedule thead{ background:var(--primary); color:#fff; }
+/* scope ALL PDF styles to the PDF html */
+html[data-doc="pdf"] .page{
+  break-after:page; page-break-after:always; min-height:100vh;
+  display:flex; flex-direction:column; gap:24px; padding:0.65in 0.5in 0.75in;
+}
 
-/* Charts as a fixed 2x2 grid per page */
-.chart-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+/* Brand system for PDF only */
+html[data-doc="pdf"]{
+  --primary: ${primary};
+  --accent:  ${accent};
+  --ink: #111827;
+  --muted:#6b7280;
+  --panel:#fff;
+}
 
-/* Rent schedule: repeat header + don't split rows */
-table.rent-schedule thead{ display:table-header-group; }
-table.rent-schedule tr{ break-inside:avoid; page-break-inside:avoid; }
+html[data-doc="pdf"] .brand-bar{ background:var(--primary); }
+html[data-doc="pdf"] .pill{ background:var(--accent); }
+html[data-doc="pdf"] table.rent-schedule thead{ background:var(--primary); color:#fff; }
 
-.comparison-summary .summary-grid .group-row:first-of-type .section-header-bar {
+/* Charts 2×2 per page */
+html[data-doc="pdf"] .chart-grid{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+
+/* Rent schedule behavior */
+html[data-doc="pdf"] table.rent-schedule thead{ display:table-header-group; }
+html[data-doc="pdf"] table.rent-schedule tr{ break-inside:avoid; page-break-inside:avoid; }
+
+/* any one-off rule */
+html[data-doc="pdf"] .comparison-summary .summary-grid .group-row:first-of-type .section-header-bar {
   margin-top:0;
 }
+
