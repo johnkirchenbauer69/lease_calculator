@@ -250,7 +250,7 @@ export default function renderProposalTemplate({ deal, scenarios = [], charts = 
 
   return `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-doc="pdf">
   <head>
     <meta charset="utf-8" />
     <title>${title}</title>
