@@ -31,8 +31,17 @@ function scenarioTitle(model, idx) {
 const MAX_SLOTS = 10;
 const COMPARE_COUNT_KEY = 'ner_compare_n';
 const SCN_KEY = 'ner_scenarios_v2';
+const RING_INDEX_KEY = 'ner_compare_ring_idx';
+const AUTO_ADD_STALE_MS = 4000;
 
 let _memStore = Array(MAX_SLOTS).fill(null);
+let _lastAutoSlotIndex = (() => {
+  try {
+    const raw = parseInt(localStorage.getItem(RING_INDEX_KEY) || '', 10);
+    if (Number.isFinite(raw) && raw >= 0 && raw < MAX_SLOTS) return raw;
+  } catch {}
+  return -1;
+})();
 
 function readStore() {
   try {
@@ -50,6 +59,135 @@ function writeStore(arr) {
 }
 function getStore() { return readStore(); }
 function setStore(arr) { writeStore(arr); }
+
+function rememberAutoSlotIndex(i) {
+  if (!Number.isFinite(i)) return;
+  _lastAutoSlotIndex = Math.max(0, Math.min(MAX_SLOTS - 1, i));
+  try { localStorage.setItem(RING_INDEX_KEY, String(_lastAutoSlotIndex)); } catch {}
+}
+
+function getRememberedAutoSlotIndex() {
+  if (!Number.isFinite(_lastAutoSlotIndex) || _lastAutoSlotIndex < 0) return -1;
+  return Math.min(MAX_SLOTS - 1, _lastAutoSlotIndex);
+}
+
+function pickNextSlot(store = getStore()) {
+  const arr = Array.isArray(store) ? store : getStore();
+  const emptyIdx = arr.findIndex(x => !x);
+  if (emptyIdx !== -1) {
+    rememberAutoSlotIndex(emptyIdx);
+    return emptyIdx;
+  }
+  const prev = getRememberedAutoSlotIndex();
+  const next = prev >= 0 ? ((prev + 1) % MAX_SLOTS) : 0;
+  rememberAutoSlotIndex(next);
+  return next;
+}
+
+function ensureCompareCountAtLeast(minCount) {
+  const desired = Math.max(1, Math.min(MAX_SLOTS, minCount));
+  const current = getCompareCount();
+  if (current >= desired) return;
+  const sel = document.getElementById('compareCount');
+  if (sel) sel.value = String(desired);
+  try { localStorage.setItem(COMPARE_COUNT_KEY, String(desired)); } catch {}
+  updateCompareTitle(desired);
+}
+
+function snapshotFromModel(model) {
+  if (!model || typeof model !== 'object') return null;
+  if (!Array.isArray(model.schedule) || model.schedule.length === 0) return null;
+  let photo = model.photoDataURL;
+  if (!photo) {
+    photo = window.__ner_photo || null;
+    if (!photo) {
+      try { photo = localStorage.getItem('ner.photo') || null; }
+      catch { photo = null; }
+    }
+  }
+  const enriched = { ...model, photoDataURL: photo || null };
+  const snap = JSON.parse(JSON.stringify(enriched));
+  delete snap.perspective;
+  return snap;
+}
+
+function autoAddScenarioFromModel(model) {
+  const snap = snapshotFromModel(model);
+  if (!snap) return null;
+  const store = Array.from(getStore());
+  const slot = pickNextSlot(store);
+  store[slot] = snap;
+  setStore(store);
+  ensureCompareCountAtLeast(slot + 1);
+  renderCompareGrid();
+  flashPinned(slot, 'Saved ✓');
+  return slot;
+}
+
+function readAutoAddIntent() {
+  const metaCandidates = [
+    window.__ner_compare_auto_add_intent,
+    window.__ner_compare_auto_add_request,
+    window.__ner_compare_auto_add_click,
+    window.__ner_compare_auto_add
+  ];
+  let meta = null;
+  for (const candidate of metaCandidates) {
+    if (candidate != null) { meta = candidate; break; }
+  }
+
+  const tsCandidates = [];
+  const pushTs = (value) => {
+    if (value == null) return;
+    const num = Number(value);
+    if (Number.isFinite(num)) tsCandidates.push(num);
+  };
+
+  pushTs(window.__ner_compare_auto_add_click_ts);
+  pushTs(window.__ner_compare_auto_add_ts);
+
+  if (meta != null) {
+    if (typeof meta === 'number') {
+      pushTs(meta);
+    } else if (typeof meta === 'object') {
+      ['ts', 'timestamp', 'time', 'at', 'clickedAt', 'clickTs']
+        .forEach(prop => pushTs(meta[prop]));
+    }
+  }
+
+  const ts = tsCandidates.length ? tsCandidates[0] : NaN;
+
+  const programmaticCandidates = [];
+  const pushProgrammatic = (value) => {
+    if (typeof value === 'boolean') programmaticCandidates.push(value);
+  };
+
+  pushProgrammatic(window.__ner_compare_auto_add_programmatic);
+  if (meta && typeof meta === 'object') {
+    ['programmatic', 'isProgrammatic', 'auto', 'programmaticClick']
+      .forEach(prop => pushProgrammatic(meta[prop]));
+    if (typeof meta.manual === 'boolean') pushProgrammatic(!meta.manual);
+  }
+
+  const programmatic = programmaticCandidates.length ? programmaticCandidates[0] : false;
+  const hasIntent = !!meta || tsCandidates.length > 0 || programmaticCandidates.some(v => v === true);
+  return { ts, programmatic, hasIntent };
+}
+
+function resetAutoAddIntent() {
+  const objKeys = [
+    '__ner_compare_auto_add_intent',
+    '__ner_compare_auto_add_request',
+    '__ner_compare_auto_add_click',
+    '__ner_compare_auto_add'
+  ];
+  const tsKeys = ['__ner_compare_auto_add_click_ts', '__ner_compare_auto_add_ts'];
+  objKeys.forEach((key) => { if (key in window) window[key] = null; });
+  tsKeys.forEach((key) => { if (key in window) window[key] = null; });
+  if ('__ner_compare_auto_add_programmatic' in window) {
+    window.__ner_compare_auto_add_programmatic = false;
+  }
+}
 
 /* ---------- count select + title ----------------------------------------- */
 function getCompareCount() {
@@ -1678,7 +1816,21 @@ function bootScenarios() {
   buildCompareCountSelect();
   renderCompareGrid();
   window.addEventListener('ner:calculated', (ev) => {
-    window.__ner_last = ev.detail?.model || window.__ner_last;
+    const detail = ev.detail || {};
+    const model = detail.model;
+    if (model) {
+      window.__ner_last = model;
+    }
+
+    const intent = readAutoAddIntent();
+    if (!intent.hasIntent) return;
+
+    const isFresh = Number.isFinite(intent.ts) && (Date.now() - intent.ts) <= AUTO_ADD_STALE_MS;
+    if (model && isFresh && !intent.programmatic) {
+      autoAddScenarioFromModel(model);
+    }
+
+    resetAutoAddIntent();
   });
 
   const showHiddenToggle = document.getElementById('showHiddenRows');
