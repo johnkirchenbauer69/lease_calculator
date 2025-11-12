@@ -29,7 +29,6 @@ function scenarioTitle(model, idx) {
 
 /* ---------- compare slots & storage -------------------------------------- */
 const MAX_SLOTS = 10;
-const COMPARE_COUNT_KEY = 'ner_compare_n';
 const SCN_KEY = 'ner_scenarios_v2';
 const RING_INDEX_KEY = 'ner_compare_ring_idx';
 const AUTO_ADD_STALE_MS = 4000;
@@ -84,16 +83,6 @@ function pickNextSlot(store = getStore()) {
   return next;
 }
 
-function ensureCompareCountAtLeast(minCount) {
-  const desired = Math.max(1, Math.min(MAX_SLOTS, minCount));
-  const current = getCompareCount();
-  if (current >= desired) return;
-  const sel = document.getElementById('compareCount');
-  if (sel) sel.value = String(desired);
-  try { localStorage.setItem(COMPARE_COUNT_KEY, String(desired)); } catch {}
-  updateCompareTitle(desired);
-}
-
 function snapshotFromModel(model) {
   if (!model || typeof model !== 'object') return null;
   if (!Array.isArray(model.schedule) || model.schedule.length === 0) return null;
@@ -118,7 +107,6 @@ function autoAddScenarioFromModel(model) {
   const slot = pickNextSlot(store);
   store[slot] = snap;
   setStore(store);
-  ensureCompareCountAtLeast(slot + 1);
   renderCompareGrid();
   flashPinned(slot, 'Saved ✓');
   return slot;
@@ -189,39 +177,17 @@ function resetAutoAddIntent() {
   }
 }
 
-/* ---------- count select + title ----------------------------------------- */
-function getCompareCount() {
-  const sel = document.getElementById('compareCount');
-  let n = sel ? parseInt(sel.value, 10) : NaN;
-  if (!Number.isFinite(n)) {
-    try { n = parseInt(localStorage.getItem(COMPARE_COUNT_KEY) || '', 10); } catch {}
-  }
-  if (!Number.isFinite(n)) n = 3;
-  return Math.max(1, Math.min(MAX_SLOTS, n));
+/* ---------- count helpers + title ---------------------------------------- */
+function deriveVisibleSlotCount(store = getStore()) {
+  const arr = Array.isArray(store) ? store : getStore();
+  const highest = arr.reduce((max, item, idx) => (item ? Math.max(max, idx + 1) : max), 0);
+  const filled = arr.filter(Boolean).length;
+  const desired = Math.max(highest, filled);
+  return Math.max(1, Math.min(MAX_SLOTS, desired));
 }
 function updateCompareTitle(n) {
   const h = document.getElementById('scenarioCompareTitle');
   if (h) h.textContent = `Cash Flow Comparison (1—${n})`;
-}
-function buildCompareCountSelect() {
-  const sel = document.getElementById('compareCount');
-  if (!sel) return;
-  sel.innerHTML = '';
-  for (let i = 1; i <= MAX_SLOTS; i++) {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = String(i);
-    sel.appendChild(opt);
-  }
-  let n = getCompareCount();
-  sel.value = String(n);
-  updateCompareTitle(n);
-  sel.addEventListener('change', () => {
-    const val = getCompareCount();
-    try { localStorage.setItem(COMPARE_COUNT_KEY, String(val)); } catch {}
-    updateCompareTitle(val);
-    renderCompareGrid();
-  });
 }
 
 /* ---------- helpers: format + small utils -------------------------------- */
@@ -1194,7 +1160,7 @@ function renderCompareGrid() {
   if (!host) return;
 
   const store = getStore();
-  const count = getCompareCount();
+  const count = deriveVisibleSlotCount(store);
   updateCompareTitle(count);
 
   const compareModels = [];
@@ -1825,7 +1791,6 @@ function renderCompareGrid() {
 
 /* ---------- boot ---------------------------------------------------------- */
 function bootScenarios() {
-  buildCompareCountSelect();
   renderCompareGrid();
   window.addEventListener('ner:calculated', (ev) => {
     const detail = ev.detail || {};
