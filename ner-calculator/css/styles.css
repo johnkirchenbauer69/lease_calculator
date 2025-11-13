@@ -3563,7 +3563,6 @@ a[aria-disabled="true"],
   position:relative;
   z-index:1;
   contain:content;
-  scrollbar-gutter:stable both-edges;
   width:100%;
   max-width:none;
   margin-block:0;
