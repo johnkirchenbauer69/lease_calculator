@@ -3617,14 +3617,19 @@ a[aria-disabled="true"],
   z-index:7;
   background:#0e1116;
   position:relative;
+  overflow:visible;
 }
 .summary-grid thead th.metric-col::after {
   content:"";
   position:absolute;
-  inset:0;
+  top:0;
+  left:0;
+  right:0;
+  height:var(--summary-card-height);
   background:#0e1116;
   pointer-events:none;
   z-index:-1;
+  display:block;
 }
 .summary-grid col.summary-col-metric {
   width:var(--summary-label-width);
@@ -3640,6 +3645,12 @@ a[aria-disabled="true"],
   min-width:var(--summary-label-width);
   max-width:var(--summary-label-width);
   font-weight:700;
+}
+.summary-grid thead th.metric-col {
+  z-index:7;
+}
+.summary-grid tbody td.metric-col {
+  z-index:6;
 }
 .summary-grid tbody td.metric-col {
   position:sticky;
