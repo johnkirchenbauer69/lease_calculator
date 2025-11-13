@@ -1605,10 +1605,16 @@ function renderCompareGrid() {
 
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
     grid.style.setProperty('--summary-visible-count', String(visible));
+    grid.style.setProperty('--summary-overflow', overflow ? '1' : '0');
+
     if (overflow) {
       grid.classList.add('summary-overflow');
+      grid.setAttribute('data-summary-overflow', 'true');
+      grid.style.setProperty('--summary-scroll-pad-end', '0px');
     } else {
       grid.classList.remove('summary-overflow');
+      grid.removeAttribute('data-summary-overflow');
+      grid.style.removeProperty('--summary-scroll-pad-end');
     }
 
     const totalWidth = labelWidth + 3 * cardWidth;
