@@ -1870,21 +1870,25 @@ window.addEventListener('load', initMap);
         return true;
       });
 
+      const existingIntent = (
+        window.__ner_compare_auto_add_intent && typeof window.__ner_compare_auto_add_intent === 'object'
+      )
+        ? window.__ner_compare_auto_add_intent
+        : {};
+
+      const intentMeta = {
+        ...existingIntent,
+        ts: timestamp,
+        programmatic: false
+      };
+
+      window.__ner_compare_auto_add_intent = intentMeta;
+      window.__ner_compare_auto_add_programmatic = false;
+
       if (autoAddRequested) {
-        const intentMeta = (
-          window.__ner_compare_auto_add_intent && typeof window.__ner_compare_auto_add_intent === 'object'
-        )
-          ? window.__ner_compare_auto_add_intent
-          : { ts: timestamp, programmatic: false };
-        intentMeta.ts = intentMeta.ts ?? timestamp;
-        if (intentMeta.programmatic == null) intentMeta.programmatic = false;
-        window.__ner_compare_auto_add_intent = intentMeta;
-        window.__ner_compare_auto_add_programmatic = false;
         window.__ner_compare_auto_add_click_ts = timestamp;
         window.__ner_compare_auto_add_ts = timestamp;
       } else {
-        window.__ner_compare_auto_add_programmatic = true;
-        delete window.__ner_compare_auto_add_intent;
         delete window.__ner_compare_auto_add_click_ts;
         delete window.__ner_compare_auto_add_ts;
       }
