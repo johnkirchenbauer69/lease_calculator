@@ -3571,8 +3571,9 @@ a[aria-disabled="true"],
   max-width:none;
 }
 
-.comparison-summary .summary-grid.summary-overflow {
-  padding-inline-end: 0;
+.comparison-summary .summary-grid.summary-overflow,
+.comparison-summary .summary-grid[data-summary-overflow="true"] {
+  --summary-scroll-pad-end: 0px;
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);
