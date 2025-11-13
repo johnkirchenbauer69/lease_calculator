@@ -1437,6 +1437,98 @@ function renderCompareGrid() {
     }
   ];
 
+  const summaryOverrides = (() => {
+    const existing = window.__summaryOverrides;
+    if (existing instanceof Map) return existing;
+    const map = new Map();
+    window.__summaryOverrides = map;
+    return map;
+  })();
+
+  const METRIC_LOOKUP = new Map(METRICS.map(metric => [metric.key, metric]));
+
+  function getEntrySlot(entry, fallbackIndex = 0) {
+    const metaSlot = entry?.meta?.slot;
+    if (Number.isFinite(metaSlot)) return metaSlot;
+    const directSlot = entry?.slot;
+    if (Number.isFinite(directSlot)) return directSlot;
+    return Number.isFinite(fallbackIndex) ? fallbackIndex : 0;
+  }
+
+  function readOverride(slot, metricKey) {
+    if (!Number.isFinite(slot)) return undefined;
+    const bySlot = summaryOverrides.get(slot);
+    if (!bySlot || typeof bySlot !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(bySlot, metricKey)) return undefined;
+    return bySlot[metricKey];
+  }
+
+  function writeOverride(slot, metricKey, value) {
+    if (!Number.isFinite(slot) || metricKey == null) return false;
+    let bySlot = summaryOverrides.get(slot);
+    if (!bySlot || typeof bySlot !== 'object') {
+      bySlot = {};
+      summaryOverrides.set(slot, bySlot);
+    }
+    const hadValue = Object.prototype.hasOwnProperty.call(bySlot, metricKey);
+    if (hadValue && bySlot[metricKey] === value) return false;
+    bySlot[metricKey] = value;
+    return true;
+  }
+
+  function removeOverride(slot, metricKey) {
+    if (!Number.isFinite(slot)) return false;
+    const bySlot = summaryOverrides.get(slot);
+    if (!bySlot || !Object.prototype.hasOwnProperty.call(bySlot, metricKey)) {
+      return false;
+    }
+    delete bySlot[metricKey];
+    if (Object.keys(bySlot).length === 0) {
+      summaryOverrides.delete(slot);
+    }
+    return true;
+  }
+
+  function computeMetricValue(entry, metric, perspective, fallbackIndex = 0) {
+    const slot = getEntrySlot(entry, fallbackIndex);
+    const override = readOverride(slot, metric.key);
+    if (override !== undefined) {
+      return { value: override, slot, isOverride: true };
+    }
+    const value = metric.calc({ kpi: entry.kpi, model: entry.model, perspective });
+    return { value, slot, isOverride: false };
+  }
+
+  function parseOverrideInput(raw) {
+    const str = String(raw ?? '').trim();
+    if (!str || str === '—') {
+      return { type: 'clear' };
+    }
+
+    let text = str.replace(/\s+/g, '');
+    let isParenNegative = false;
+    if (/^\(.*\)$/.test(text)) {
+      isParenNegative = true;
+      text = text.slice(1, -1);
+    }
+    text = text.replace(/[$,]/g, '');
+    if (text.endsWith('%')) {
+      text = text.slice(0, -1);
+    }
+
+    if (!text) {
+      return { type: 'clear' };
+    }
+
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) {
+      const value = isParenNegative ? -numeric : numeric;
+      return { type: 'value', value };
+    }
+
+    return { type: 'value', value: str };
+  }
+
   function shouldHideRow(values) {
     return values.every(v => {
       if (v == null) return true;
@@ -1510,7 +1602,8 @@ function renderCompareGrid() {
           </td>
         </tr>`;
       METRICS.filter(m => m.group === group).forEach(metric => {
-        const rawVals = entries.map(entry => metric.calc({ kpi: entry.kpi, model: entry.model, perspective }));
+        const valueDetails = entries.map((entry, idx) => computeMetricValue(entry, metric, perspective, idx));
+        const rawVals = valueDetails.map(detail => detail.value);
         const hidden = shouldHideRow(rawVals);
         if (hidden && !showHidden) return;
         const better = resolveBetter(metric, perspective);
@@ -1518,9 +1611,13 @@ function renderCompareGrid() {
         const sortableClass = metric.sortable === false ? '' : ' sortable';
         const labelTitle = escapeHtml(metric.label);
         const labelCell = `<td class="metric-col${sortableClass}" data-metric="${metric.key}" title="${labelTitle}">${metric.label}</td>`;
-        const cells = rawVals.map((val, idx) => {
+        const cells = valueDetails.map((detail, idx) => {
+          const val = detail.value;
+          const slot = detail.slot;
           const ctx = entries[idx];
-          const formatted = metric.fmt ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective }) : (val ?? '—');
+          const formatted = (metric.fmt && typeof val !== 'string')
+            ? metric.fmt(val, { kpi: ctx.kpi, model: ctx.model, perspective })
+            : (val != null ? String(val) : '—');
           const numeric = Number(val);
           const isNumeric = Number.isFinite(numeric);
           const numericHasValue = isNumeric && Math.abs(numeric) >= 1e-6;
@@ -1537,9 +1634,23 @@ function renderCompareGrid() {
           const hasDisplayValue = numericHasValue || textualHasValue;
           const bestClass = (idx === bestIdx && numericHasValue) ? 'best' : '';
           const dimClass = hasDisplayValue ? '' : 'dim';
-          const cellTitle = stripTags(formatted);
-          const titleAttr = cellTitle ? ` title="${escapeHtml(cellTitle)}"` : '';
-          return `<td class="${bestClass} ${dimClass}"${titleAttr}>${formatted}</td>`;
+          const overrideClass = detail.isOverride ? 'override' : '';
+          const cellTitleBase = stripTags(formatted);
+          const titleParts = [];
+          if (cellTitleBase) titleParts.push(cellTitleBase);
+          if (detail.isOverride) titleParts.push('Override applied. Right-click to reset.');
+          const titleAttr = titleParts.length ? ` title="${escapeHtml(titleParts.join(' • '))}"` : '';
+          const displayText = stripTags(formatted);
+          const slotAttr = Number.isFinite(slot) ? String(slot) : String(idx);
+          const overrideAttr = detail.isOverride ? 'true' : 'false';
+          const overrideValue = detail.isOverride && typeof val !== 'object' ? String(val) : '';
+          const overrideValueAttr = detail.isOverride && overrideValue
+            ? ` data-override-value="${escapeHtml(overrideValue)}"`
+            : '';
+          const classAttr = ['summary-cell', bestClass, dimClass, overrideClass]
+            .filter(Boolean)
+            .join(' ');
+          return `<td class="${classAttr}" data-slot="${escapeHtml(slotAttr)}" data-metric="${metric.key}" data-label="${labelTitle}" data-display="${escapeHtml(displayText)}" data-override="${overrideAttr}"${overrideValueAttr}${titleAttr}>${formatted}</td>`;
         }).join('');
         tbodyHTML += `<tr data-row="${metric.key}">${labelCell}${cells}</tr>`;
       });
@@ -1748,8 +1859,8 @@ function renderCompareGrid() {
     if (metricDef) {
       const better = resolveBetter(metricDef, perspective);
       ordered.sort((a, b) => {
-        const va = metricDef.calc({ kpi: a.kpi, model: a.model, perspective });
-        const vb = metricDef.calc({ kpi: b.kpi, model: b.model, perspective });
+        const va = computeMetricValue(a, metricDef, perspective).value;
+        const vb = computeMetricValue(b, metricDef, perspective).value;
         const svA = toSortValue(va, better, sortState.desc);
         const svB = toSortValue(vb, better, sortState.desc);
         return sortState.desc ? (svB - svA) : (svA - svB);
@@ -1759,6 +1870,92 @@ function renderCompareGrid() {
     const columnCount = ordered.length;
     const html = buildSummaryTable(ordered, { showHidden, perspective });
     mount.innerHTML = `<div class="summary-wrap">${html}</div>`;
+
+    const reRender = () => {
+      window.renderComparisonSummary({ showHidden });
+    };
+
+    const dataCells = mount.querySelectorAll('tbody td[data-slot][data-metric]');
+    dataCells.forEach(td => {
+      const slot = Number(td.dataset.slot);
+      const metricKey = td.dataset.metric;
+      const metric = METRIC_LOOKUP.get(metricKey);
+      const display = td.dataset.display || td.textContent.trim();
+      const overrideValue = td.dataset.overrideValue;
+      const isOverride = td.dataset.override === 'true';
+      const label = metric?.label || metricKey || 'Metric';
+      const scenarioLabel = Number.isFinite(slot) ? `Scenario ${slot + 1}` : 'Scenario';
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'summary-cell-input';
+      input.value = (isOverride && overrideValue != null) ? overrideValue : display;
+      input.setAttribute('aria-label', `${label} for ${scenarioLabel}`);
+      input.style.width = '100%';
+      input.style.boxSizing = 'border-box';
+      input.style.background = 'transparent';
+      input.style.border = 'none';
+      input.style.outline = 'none';
+      input.style.padding = '0';
+      input.style.margin = '0';
+      input.style.font = 'inherit';
+      input.style.textAlign = 'inherit';
+
+      td.textContent = '';
+      td.appendChild(input);
+
+      td.addEventListener('contextmenu', (event) => {
+        if (removeOverride(slot, metricKey)) {
+          event.preventDefault();
+          reRender();
+        }
+      });
+
+      input.addEventListener('focus', () => {
+        input.select();
+      });
+
+      let cancelNextBlur = false;
+      let hasCommitted = false;
+
+      const commit = () => {
+        if (hasCommitted) return;
+        const parsed = parseOverrideInput(input.value);
+        let changed = false;
+        if (parsed.type === 'clear') {
+          changed = removeOverride(slot, metricKey);
+        } else {
+          changed = writeOverride(slot, metricKey, parsed.value);
+        }
+        if (changed) {
+          hasCommitted = true;
+          reRender();
+        } else if (parsed.type === 'clear') {
+          input.value = display;
+        }
+      };
+
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commit();
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          cancelNextBlur = true;
+          input.value = (isOverride && overrideValue != null) ? overrideValue : display;
+          input.blur();
+        }
+      });
+
+      input.addEventListener('blur', () => {
+        if (cancelNextBlur) {
+          cancelNextBlur = false;
+          input.value = display;
+          return;
+        }
+        commit();
+      });
+    });
 
     mount.querySelectorAll('.metric-col.sortable').forEach(el => {
       el.addEventListener('click', () => {
