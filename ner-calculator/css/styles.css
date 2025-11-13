@@ -775,6 +775,12 @@ select:focus option {
     margin-bottom: 10px;
 }
 
+.panel-results #rent-schedule,
+.panel-results .compare-section,
+.panel-results #analysis-charts {
+    grid-column: 1 / -1;
+}
+
 @media (max-width: 1100px) {
     .panel-results .cards {
         grid-template-columns: repeat(2, 1fr);
