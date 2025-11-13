@@ -1858,11 +1858,40 @@ window.addEventListener('load', initMap);
       e.stopPropagation();
       const timestamp = Date.now();
       window.__calcClickedAt = timestamp;
-      const intentMeta = { ts: timestamp, programmatic: false };
-      window.__ner_compare_auto_add_intent = intentMeta;
-      window.__ner_compare_auto_add_programmatic = false;
-      window.__ner_compare_auto_add_click_ts = timestamp;
-      window.__ner_compare_auto_add_ts = timestamp;
+      const autoAddSignals = [
+        window.__ner_compare_auto_add_intent,
+        window.__ner_compare_auto_add_request,
+        window.__ner_compare_auto_add_click,
+        window.__ner_compare_auto_add
+      ];
+      const autoAddRequested = autoAddSignals.some(signal => {
+        if (!signal) return false;
+        if (typeof signal === 'object') return Object.keys(signal).length > 0;
+        return true;
+      });
+
+      if (autoAddRequested) {
+        const intentMeta = (
+          window.__ner_compare_auto_add_intent && typeof window.__ner_compare_auto_add_intent === 'object'
+        )
+          ? window.__ner_compare_auto_add_intent
+          : { ts: timestamp, programmatic: false };
+        intentMeta.ts = intentMeta.ts ?? timestamp;
+        if (intentMeta.programmatic == null) intentMeta.programmatic = false;
+        window.__ner_compare_auto_add_intent = intentMeta;
+        window.__ner_compare_auto_add_programmatic = false;
+        window.__ner_compare_auto_add_click_ts = timestamp;
+        window.__ner_compare_auto_add_ts = timestamp;
+      } else {
+        window.__ner_compare_auto_add_programmatic = true;
+        delete window.__ner_compare_auto_add_intent;
+        delete window.__ner_compare_auto_add_click_ts;
+        delete window.__ner_compare_auto_add_ts;
+      }
+
+      if ('__ner_compare_auto_add_request' in window) {
+        window.__ner_compare_auto_add_request = false;
+      }
       window.setTimeout(() => {
         if (window.__calcClickedAt === timestamp) delete window.__calcClickedAt;
       }, CALC_CLICK_WINDOW_MS);
