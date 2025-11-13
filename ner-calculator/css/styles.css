@@ -3615,6 +3615,11 @@ a[aria-disabled="true"],
   padding-top:16px;
   padding-bottom:16px;
 }
+.summary-grid col.summary-col-metric {
+  width:var(--summary-label-width);
+  min-width:var(--summary-label-width);
+  max-width:var(--summary-label-width);
+}
 .summary-grid .metric-col {
   position:sticky;
   left:0;
@@ -3632,6 +3637,11 @@ a[aria-disabled="true"],
 }
 .summary-grid .group-row {
   background:transparent;
+}
+.summary-grid col.summary-col-card {
+  width:var(--summary-card-width);
+  min-width:var(--summary-card-width);
+  max-width:var(--summary-card-width);
 }
 .summary-grid .col-card,
 .summary-grid tbody td:not(.metric-col) {
