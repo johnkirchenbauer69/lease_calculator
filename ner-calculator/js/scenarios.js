@@ -1617,9 +1617,16 @@ function renderCompareGrid() {
       grid.style.removeProperty('--summary-scroll-pad-end');
     }
 
-    const totalWidth = labelWidth + 3 * cardWidth;
-    table.style.minWidth = `${totalWidth}px`;
-    table.style.maxWidth = `${totalWidth}px`;
+    const visibleWidth = labelWidth + visible * cardWidth;
+    const baselineWidth = labelWidth + 3 * cardWidth;
+
+    table.style.minWidth = `${baselineWidth}px`;
+
+    if (columnCount <= visible) {
+      table.style.maxWidth = `${visibleWidth}px`;
+    } else {
+      table.style.maxWidth = `${labelWidth + columnCount * cardWidth}px`;
+    }
   }
 
   function refreshSummaryViewport() {
