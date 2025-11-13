@@ -3614,6 +3614,17 @@ a[aria-disabled="true"],
 .summary-grid thead th.metric-col {
   padding-top:16px;
   padding-bottom:16px;
+  z-index:7;
+  background:#0e1116;
+  position:relative;
+}
+.summary-grid thead th.metric-col::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  background:#0e1116;
+  pointer-events:none;
+  z-index:-1;
 }
 .summary-grid col.summary-col-metric {
   width:var(--summary-label-width);
@@ -3634,6 +3645,7 @@ a[aria-disabled="true"],
   position:sticky;
   left:0;
   background:#0e1116;
+  z-index:6;
 }
 .summary-grid .group-row {
   background:transparent;
