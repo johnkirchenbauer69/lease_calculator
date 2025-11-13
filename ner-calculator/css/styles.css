@@ -3626,7 +3626,8 @@ a[aria-disabled="true"],
   pointer-events:none;
   z-index:-1;
 }
-.summary-grid col.summary-col-metric {
+.summary-grid col.summary-col-metric,
+.summary-grid .metric-col {
   width:var(--summary-label-width);
   min-width:var(--summary-label-width);
   max-width:var(--summary-label-width);
@@ -3636,9 +3637,6 @@ a[aria-disabled="true"],
   left:0;
   background:#0e1116;
   z-index:3;
-  width:var(--summary-label-width);
-  min-width:var(--summary-label-width);
-  max-width:var(--summary-label-width);
   font-weight:700;
 }
 .summary-grid tbody td.metric-col {
@@ -3650,11 +3648,7 @@ a[aria-disabled="true"],
 .summary-grid .group-row {
   background:transparent;
 }
-.summary-grid col.summary-col-card {
-  width:var(--summary-card-width);
-  min-width:var(--summary-card-width);
-  max-width:var(--summary-card-width);
-}
+.summary-grid col.summary-col-card,
 .summary-grid .col-card,
 .summary-grid tbody td:not(.metric-col) {
   width:var(--summary-card-width);

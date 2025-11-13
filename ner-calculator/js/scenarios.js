@@ -1491,11 +1491,10 @@ function renderCompareGrid() {
         </th>`;
     }).join('');
 
-    const colgroup = `
-          <colgroup>
-            <col class="summary-col-metric" />
-            ${entries.map(() => '<col class="summary-col-card" />').join('\n            ')}
-          </colgroup>`;
+    const colgroupCols = [
+      '<col class="summary-col-metric" />',
+      ...entries.map(() => '<col class="summary-col-card" />')
+    ].join('\n            ');
 
     const groups = [...new Set(METRICS.map(m => m.group))];
     let tbodyHTML = '';
@@ -1549,7 +1548,9 @@ function renderCompareGrid() {
     return `
       <div class="summary-grid">
         <table>
-          ${colgroup}
+          <colgroup>
+            ${colgroupCols}
+          </colgroup>
           <thead>
             <tr>
               <th class="metric-col"></th>
