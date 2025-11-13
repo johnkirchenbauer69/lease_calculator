@@ -3565,9 +3565,14 @@ a[aria-disabled="true"],
 }
 .comparison-summary .summary-grid {
   margin-inline: calc(-1 * var(--panel-gutter));
-  padding-inline: var(--panel-gutter);
+  padding-inline-start: var(--panel-gutter);
+  padding-inline-end: var(--summary-scroll-pad-end, var(--panel-gutter));
   width:100%;
   max-width:none;
+}
+
+.comparison-summary .summary-grid.summary-overflow {
+  padding-inline-end: 0;
 }
 .summary-grid:focus {
   outline:2px solid var(--accent, #e71d36);

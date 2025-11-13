@@ -1601,9 +1601,15 @@ function renderCompareGrid() {
     const labelWidth = parse(computed.getPropertyValue('--summary-label-width')) || 260;
     const cardWidth = Math.max(280, Math.floor((usableWidth - labelWidth) / 3));
     const visible = Math.max(1, Math.min(columnCount, 3));
+    const overflow = columnCount > visible;
 
     grid.style.setProperty('--summary-card-width', `${cardWidth}px`);
     grid.style.setProperty('--summary-visible-count', String(visible));
+    if (overflow) {
+      grid.classList.add('summary-overflow');
+    } else {
+      grid.classList.remove('summary-overflow');
+    }
 
     const totalWidth = labelWidth + 3 * cardWidth;
     table.style.minWidth = `${totalWidth}px`;
