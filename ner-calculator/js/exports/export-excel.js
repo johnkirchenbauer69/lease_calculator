@@ -326,7 +326,7 @@
     shM.views = [{ state: 'frozen', ySplit: 1 }];
 
     // ===== Annual (month-weighted) =====
-    const shA = wb.addWorksheet('Annual', { properties: { defaultRowHeight: 18 } });
+    const shA = wb.addWorksheet('Yearly + Abatement', { properties: { defaultRowHeight: 18 } });
     const colsA = [
       { h: 'Year', k: 'year', w: 8, f: fmtInt },
       { h: 'Months', k: 'months', w: 10, f: fmtInt },
