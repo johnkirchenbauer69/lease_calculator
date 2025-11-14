@@ -3677,7 +3677,6 @@ window.addEventListener('load', initMap);
         }
         col.render = (row) => fmtUSD(Number(row.monthlyGross$ || 0));
       } else if (col.key === 'month') {
-        monthColIndex = schema.indexOf(col);
         col.label = 'Months';
         if (col.headerHTML) {
           col.headerHTML = col.headerHTML.replace(/Month/gi, 'Months');
@@ -3730,16 +3729,55 @@ window.addEventListener('load', initMap);
       hasAbated: false,
       totalAbatedMonths: 0
     };
-  
-    sortedYears.forEach(year => {
-      const rowsForYear = grouped.get(year);
-      const weightSum = rowsForYear.reduce((sum, row) => sum + weightForRow(row), 0);
-  
+
+    const approxEqual = (a, b, epsilon = 1e-9) => Math.abs(a - b) <= epsilon;
+
+    const baseRentKey = perspective === 'tenant' ? 'baseRentPSF' : 'baseRentPSF_LL';
+
+    const monthRangeLabel = (start, end, count) => {
+      if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0) {
+        return (start === end) ? `${start}` : `${start}\u2013${end}`;
+      }
+      if (count === 1) return '1';
+      return `${count}`;
+    };
+
+    const labelForGroup = (yearKey) => {
+      if (perspective === 'tenant') {
+        return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
+      }
+      return yearKey != null ? `Year ${yearKey}` : 'Year —';
+    };
+
+    const resolveLeaseYear = (row) => {
+      if (perspective !== 'tenant') return row.year ?? null;
+      const periodNumber = normalizeNumber(row.period);
+      if (!periodNumber) return null;
+      const computed = Math.ceil(periodNumber / 12);
+      return computed > 0 ? computed : null;
+    };
+
+    const aggregatedRows = [];
+    let currentGroup = null;
+
+    const flushGroup = () => {
+      if (!currentGroup) return;
+      const { rows: groupRows, startPeriod, endPeriod, yearKey, isAbated } = currentGroup;
+      if (!Array.isArray(groupRows) || groupRows.length === 0) {
+        currentGroup = null;
+        return;
+      }
+
+      const firstRow = groupRows[0];
+      const monthCount = groupRows.length;
       const aggRow = {
-        period: '',
-        year,
-        month: '',
-        spaceSize: rowsForYear[0]?.spaceSize ?? 0
+        period: labelForGroup(yearKey),
+        year: yearKey ?? '',
+        month: monthRangeLabel(startPeriod, endPeriod, monthCount),
+        spaceSize: firstRow?.spaceSize ?? 0,
+        cashFactor: firstRow?.cashFactor,
+        isAbated,
+        __monthCount: monthCount
       };
 
       const monthsInPeriod = rowsForYear.length;
@@ -3762,18 +3800,67 @@ window.addEventListener('load', initMap);
       }
   
       psfKeys.forEach(key => {
-        const weightedSum = rowsForYear.reduce((sum, row) => sum + (Number(row[key]) || 0) * weightForRow(row), 0);
-        const avg = weightSum ? (weightedSum / weightSum) : 0;
-        aggRow[key] = avg;
-        grand.psfWeighted[key] += weightedSum;
+        if (key in firstRow) {
+          aggRow[key] = firstRow[key];
+        } else {
+          aggRow[key] = 0;
+        }
       });
-  
+
       sumKeys.forEach(key => {
-        const total = rowsForYear.reduce((sum, row) => sum + (Number(row[key]) || 0), 0);
+        const total = groupRows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0);
         aggRow[key] = total;
-        grand.totals[key] += total;
       });
-  
+
+      aggregatedRows.push(aggRow);
+      currentGroup = null;
+    };
+
+    monthlyRows.forEach(row => {
+      const monthIndex = normalizeNumber(row.period);
+      const leaseYear = resolveLeaseYear(row);
+      const yearKey = leaseYear ?? (row.year ?? null);
+      const baseRentValue = normalizeNumber(row[baseRentKey]);
+      const netValue = normalizeNumber(row.monthlyNet$);
+      const isAbated = Math.abs(netValue) <= 1e-9 || Math.abs(baseRentValue) <= 1e-9;
+
+      const psfSnapshot = {};
+      psfKeys.forEach(key => {
+        psfSnapshot[key] = normalizeNumber(row[key]);
+      });
+
+      const shouldStartNew = !currentGroup
+        || currentGroup.yearKey !== yearKey
+        || currentGroup.isAbated !== isAbated
+        || psfKeys.some(key => !approxEqual(currentGroup.psfValues[key] ?? 0, psfSnapshot[key] ?? 0));
+
+      if (shouldStartNew) {
+        flushGroup();
+        currentGroup = {
+          yearKey,
+          isAbated,
+          psfValues: psfSnapshot,
+          rows: [],
+          startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
+          endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null
+        };
+      }
+
+      currentGroup.rows.push(row);
+      if (Number.isFinite(monthIndex) && monthIndex > 0) {
+        if (!Number.isFinite(currentGroup.startPeriod) || currentGroup.startPeriod == null) {
+          currentGroup.startPeriod = monthIndex;
+        }
+        currentGroup.endPeriod = monthIndex;
+      }
+      currentGroup.psfValues = psfSnapshot;
+    });
+
+    flushGroup();
+
+    const grandTotals = Object.fromEntries(sumKeys.map(key => [key, 0]));
+
+    aggregatedRows.forEach(aggRow => {
       const tr = document.createElement('tr');
       schema.forEach((col, idx) => {
         const td = document.createElement('td');
@@ -3801,6 +3888,9 @@ window.addEventListener('load', initMap);
         }
 
         tr.appendChild(td);
+        if (sumKeys.includes(col.key)) {
+          grandTotals[col.key] += normalizeNumber(aggRow[col.key]);
+        }
       });
       tbody.appendChild(tr);
 
@@ -3812,25 +3902,34 @@ window.addEventListener('load', initMap);
         }
       }
     });
-  
+
+    const totalMonths = aggregatedRows.reduce((sum, row) => sum + (Number(row.__monthCount) || 0), 0);
+
+    const totalWeight = monthlyRows.reduce((sum, row) => sum + weightForRow(row), 0);
+    const psfWeightedTotals = Object.fromEntries(psfKeys.map(key => [key, 0]));
+    psfKeys.forEach(key => {
+      const weighted = monthlyRows.reduce((sum, row) => {
+        return sum + normalizeNumber(row[key]) * weightForRow(row);
+      }, 0);
+      psfWeightedTotals[key] = weighted;
+    });
+
     const grandRow = document.createElement('tr');
     grandRow.classList.add('grand-total', 'row-grandtotal');
-  
-    const totalMonths = monthlyRows.length;
-  
+
     schema.forEach((col, idx) => {
       const td = document.createElement('td');
       if (col.className) {
         col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
       }
-  
+
       if (idx === labelColIdx) {
         td.textContent = 'Grand Total';
       } else if (psfKeys.includes(col.key)) {
-        const avg = grand.weight ? (grand.psfWeighted[col.key] / grand.weight) : 0;
+        const avg = totalWeight ? (psfWeightedTotals[col.key] / totalWeight) : 0;
         td.textContent = fmtUSD(avg);
       } else if (sumKeys.includes(col.key)) {
-        td.textContent = fmtUSD(grand.totals[col.key]);
+        td.textContent = fmtUSD(grandTotals[col.key]);
         td.classList.add('cell-dollar');
       } else if (col.key === 'month') {
         td.textContent = `${totalMonths} Months`;
@@ -3853,10 +3952,10 @@ window.addEventListener('load', initMap);
         td.textContent = EM_DASH;
         td.classList.add('cell-muted');
       }
-  
+
       grandRow.appendChild(td);
     });
-  
+
     tbody.appendChild(grandRow);
   }
   
