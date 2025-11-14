@@ -184,7 +184,7 @@ function openDialog(){
               </label>
               <div class="pdf-checks tables">
                 <label class="check-item"><span>Monthly</span><input type="checkbox" id="pdfIncMonthly" checked></label>
-                <label class="check-item"><span>Annual</span><input type="checkbox" id="pdfIncAnnual" checked></label>
+                <label class="check-item"><span>Yearly + Abatement</span><input type="checkbox" id="pdfIncAnnual" checked></label>
                 <label class="check-item"><span>Monthly + Subtotals</span><input type="checkbox" id="pdfIncMonthlySub" checked></label>
               </div>
             </div>
@@ -535,7 +535,7 @@ function buildDoc(opts){
 
     const sections = `
       ${incMonthly ? `<h2 class="page-break">Monthly</h2><table><thead><tr>${thsMonthly}</tr></thead><tbody>${monthlyRows}</tbody></table>` : ''}
-      ${incAnnual ? `<h2 class="${incMonthly ? '' : 'page-break'}">Annual</h2><table><thead><tr>${thsAnnual}</tr></thead><tbody>${annualRows}</tbody></table>` : ''}
+      ${incAnnual ? `<h2 class="${incMonthly ? '' : 'page-break'}">Yearly + Abatement</h2><table><thead><tr>${thsAnnual}</tr></thead><tbody>${annualRows}</tbody></table>` : ''}
       ${incMonthlySub ? `<h2 class="${(incMonthly||incAnnual) ? '' : 'page-break'}">Monthly + Subtotals</h2><table><thead><tr>${thsMonthly}</tr></thead><tbody>${monthlySubRows}</tbody></table>` : ''}
     `;
 
