@@ -3249,6 +3249,7 @@ window.addEventListener('load', initMap);
           grossPSF,
           monthlyNet$: base$,
           monthlyGross$: displayGross$,
+          isAbated: !!row.isAbated,
           otherMonthly$Tenant: other$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
           opEx: row.opEx,
@@ -3354,6 +3355,7 @@ window.addEventListener('load', initMap);
           grossPSF_LL,
           monthlyNet$,
           monthlyGross$,
+          isAbated: !!row.isAbated,
           baseCollected: baseCollected$,
           otherMonthly$Tenant: otherTenant$,
           otherMonthly$LL: llOther$,
@@ -3648,9 +3650,19 @@ window.addEventListener('load', initMap);
     }
   
     const schema = buildMonthlyColumns(data, perspective).map(col => ({ ...col }));
-  
+
+    const abatementChipHTML = (ctx = {}) => {
+      if (!ctx || !ctx.isAbated) return '';
+      const count = Number(ctx.abatedMonths);
+      const monthsText = Number.isFinite(count) && count > 0
+        ? `${count} month${count === 1 ? '' : 's'} abated`
+        : 'Abated period';
+      const safeTitle = monthsText.replace(/"/g, '&quot;');
+      return `<span class="chip chip-abated" title="${safeTitle}">Abated</span>`;
+    };
+
     let monthColIndex = -1;
-  
+
     schema.forEach(col => {
       if (col.key === 'monthlyNet$') {
         col.label = 'Total Net Rent ($)';
@@ -3673,6 +3685,21 @@ window.addEventListener('load', initMap);
         col.render = (row) => row.month;
       }
     });
+
+    const abatementColumn = {
+      key: 'abatement',
+      label: 'Abatement',
+      headerHTML: 'Abatement',
+      className: 'cell-abatement',
+      render: (row) => (row?.isAbated ? 'Abated' : ''),
+      renderHTML: (row) => abatementChipHTML(row)
+    };
+
+    if (monthColIndex !== -1) {
+      schema.splice(monthColIndex + 1, 0, abatementColumn);
+    } else {
+      schema.push(abatementColumn);
+    }
   
     renderTableHeader(schema, thead);
   
@@ -3699,7 +3726,9 @@ window.addEventListener('load', initMap);
     const grand = {
       weight: 0,
       psfWeighted: Object.fromEntries(psfKeys.map(key => [key, 0])),
-      totals: Object.fromEntries(sumKeys.map(key => [key, 0]))
+      totals: Object.fromEntries(sumKeys.map(key => [key, 0])),
+      hasAbated: false,
+      totalAbatedMonths: 0
     };
   
     sortedYears.forEach(year => {
@@ -3712,10 +3741,17 @@ window.addEventListener('load', initMap);
         month: '',
         spaceSize: rowsForYear[0]?.spaceSize ?? 0
       };
-  
+
       const monthsInPeriod = rowsForYear.length;
       aggRow.month = `${monthsInPeriod} Months`;
-  
+
+      const abatedMonths = rowsForYear.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
+      const isAbatedPeriod = abatedMonths > 0;
+      aggRow.isAbated = isAbatedPeriod;
+      aggRow.abatedMonths = abatedMonths;
+      if (isAbatedPeriod) grand.hasAbated = true;
+      grand.totalAbatedMonths += abatedMonths;
+
       const periodValues = rowsForYear
         .map(r => Number(r.period) || 0)
         .filter(val => val > 0);
@@ -3744,17 +3780,30 @@ window.addEventListener('load', initMap);
         if (col.className) {
           col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
         }
-        let textContent;
-        if (col.key === 'spaceSize') {
-          textContent = (Number(aggRow.spaceSize || 0)).toLocaleString();
+
+        const htmlContent = typeof col.renderHTML === 'function' ? (col.renderHTML(aggRow) || '') : '';
+
+        if (htmlContent) {
+          td.innerHTML = htmlContent;
+          if (col.key === abatementColumn.key && aggRow.abatedMonths > 0) {
+            const count = aggRow.abatedMonths;
+            const label = `${count} month${count === 1 ? '' : 's'} abated`;
+            td.setAttribute('aria-label', label);
+          }
         } else {
-          textContent = col.render(aggRow);
+          let textContent = '';
+          if (col.key === 'spaceSize') {
+            textContent = (Number(aggRow.spaceSize || 0)).toLocaleString();
+          } else if (typeof col.render === 'function') {
+            textContent = col.render(aggRow);
+          }
+          td.textContent = textContent ?? '';
         }
-        td.textContent = textContent;
+
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
-  
+
       grand.weight += weightSum;
       if (monthColIndex !== -1) {
         const monthColKey = schema[monthColIndex]?.key;
@@ -3785,6 +3834,21 @@ window.addEventListener('load', initMap);
         td.classList.add('cell-dollar');
       } else if (col.key === 'month') {
         td.textContent = `${totalMonths} Months`;
+      } else if (col.key === abatementColumn.key) {
+        const html = abatementColumn.renderHTML({
+          isAbated: grand.hasAbated,
+          abatedMonths: grand.totalAbatedMonths
+        });
+        if (html) {
+          td.innerHTML = html;
+          if (grand.totalAbatedMonths > 0) {
+            const count = grand.totalAbatedMonths;
+            const label = `${count} month${count === 1 ? '' : 's'} abated`;
+            td.setAttribute('aria-label', label);
+          }
+        } else {
+          td.textContent = '';
+        }
       } else {
         td.textContent = EM_DASH;
         td.classList.add('cell-muted');
