@@ -767,6 +767,25 @@ select:focus option {
     white-space: nowrap;
 }
 
+.chip.chip-abated {
+    background: color-mix(in srgb, var(--accent, #0a84ff) 18%, transparent);
+    border-color: color-mix(in srgb, var(--accent, #0a84ff) 55%, transparent);
+    color: color-mix(in srgb, var(--accent, #0a84ff) 75%, white 25%);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #0a84ff) 40%, transparent);
+}
+
+.cell-abatement {
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.cell-abatement .chip {
+    font-size: .75rem;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+
 /* KPI cards grid (restored) */
 .panel-results .cards {
     display: grid;
