@@ -3707,6 +3707,11 @@ window.addEventListener('load', initMap);
     const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
     const psfKeys = schema.filter(col => col.isPSF && col.key).map(col => col.key);
     const sumKeys = schema.filter(col => typeof col.sum === 'function').map(col => col.key);
+
+    const toNumber = (value) => {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    };
   
     const weightForRow = (row) => {
       const w = Number(row.cashFactor);
@@ -3751,7 +3756,7 @@ window.addEventListener('load', initMap);
 
     const resolveLeaseYear = (row) => {
       if (perspective !== 'tenant') return row.year ?? null;
-      const periodNumber = normalizeNumber(row.period);
+      const periodNumber = toNumber(row.period);
       if (!periodNumber) return null;
       const computed = Math.ceil(periodNumber / 12);
       return computed > 0 ? computed : null;
@@ -3808,7 +3813,7 @@ window.addEventListener('load', initMap);
       });
 
       sumKeys.forEach(key => {
-        const total = groupRows.reduce((sum, row) => sum + normalizeNumber(row[key]), 0);
+        const total = groupRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
         aggRow[key] = total;
       });
 
@@ -3817,16 +3822,16 @@ window.addEventListener('load', initMap);
     };
 
     monthlyRows.forEach(row => {
-      const monthIndex = normalizeNumber(row.period);
+      const monthIndex = toNumber(row.period);
       const leaseYear = resolveLeaseYear(row);
       const yearKey = leaseYear ?? (row.year ?? null);
-      const baseRentValue = normalizeNumber(row[baseRentKey]);
-      const netValue = normalizeNumber(row.monthlyNet$);
+      const baseRentValue = toNumber(row[baseRentKey]);
+      const netValue = toNumber(row.monthlyNet$);
       const isAbated = Math.abs(netValue) <= 1e-9 || Math.abs(baseRentValue) <= 1e-9;
 
       const psfSnapshot = {};
       psfKeys.forEach(key => {
-        psfSnapshot[key] = normalizeNumber(row[key]);
+        psfSnapshot[key] = toNumber(row[key]);
       });
 
       const shouldStartNew = !currentGroup
@@ -3889,7 +3894,7 @@ window.addEventListener('load', initMap);
 
         tr.appendChild(td);
         if (sumKeys.includes(col.key)) {
-          grandTotals[col.key] += normalizeNumber(aggRow[col.key]);
+          grandTotals[col.key] += toNumber(aggRow[col.key]);
         }
       });
       tbody.appendChild(tr);
@@ -3909,7 +3914,7 @@ window.addEventListener('load', initMap);
     const psfWeightedTotals = Object.fromEntries(psfKeys.map(key => [key, 0]));
     psfKeys.forEach(key => {
       const weighted = monthlyRows.reduce((sum, row) => {
-        return sum + normalizeNumber(row[key]) * weightForRow(row);
+        return sum + toNumber(row[key]) * weightForRow(row);
       }, 0);
       psfWeightedTotals[key] = weighted;
     });
