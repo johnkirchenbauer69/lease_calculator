@@ -4013,6 +4013,7 @@ window.addEventListener('load', initMap);
       return;
     }
 
+    const schema = buildMonthlyColumns(data, perspective);
     let monthColIndex = -1;
 
     schema.forEach((col, idx) => {
