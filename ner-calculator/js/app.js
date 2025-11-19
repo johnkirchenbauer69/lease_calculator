@@ -3252,6 +3252,11 @@ window.addEventListener('load', initMap);
           monthlyGross$: displayGross$,
           isAbated: !!row.isAbated,
           abatement$,
+          tenantTaxes$: taxes$,
+          tenantCam$: cam$,
+          tenantIns$: ins$,
+          tenantMgmt$: mgmt$,
+          tenantOther$: other$,
           otherMonthly$Tenant: other$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
           opEx: row.opEx,
@@ -3361,6 +3366,16 @@ window.addEventListener('load', initMap);
           isAbated: !!row.isAbated,
           abatement$,
           baseCollected: baseCollected$,
+          tenantTaxes$: taxesRecovery,
+          tenantCam$: camRecovery,
+          tenantIns$: insRecovery,
+          tenantMgmt$: mgmtRecovery,
+          tenantOther$: otherTenant$,
+          llTaxes$: llTaxes$,
+          llCam$: llCam$,
+          llIns$: llIns$,
+          llMgmt$: llMgmt$,
+          llOther$: llOther$,
           otherMonthly$Tenant: otherTenant$,
           otherMonthly$LL: llOther$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
@@ -3748,6 +3763,42 @@ window.addEventListener('load', initMap);
         return Number.isFinite(n) ? n : 0;
       };
 
+      const psfDollarValue = (row, key) => {
+        switch (key) {
+          case 'baseRentPSF':
+          case 'baseRentPSF_LL':
+            return toNumber(row.baseCollected ?? row.monthlyNet$ ?? row.totals?.monthlyNet);
+          case 'grossPSF':
+          case 'grossPSF_LL':
+            return toNumber(row.monthlyGross$ ?? row.totals?.monthlyGross ?? row.totals?.monthlyCashOut ?? row.totals?.totalCashIn);
+          case 'taxesPSF':
+            return toNumber(row.tenantTaxes$ ?? row.recoveries?.taxes ?? row.opEx?.taxes ?? row.totals?.taxes);
+          case 'taxesPSF_LL':
+            return toNumber(row.llTaxes$ ?? row.opEx?.taxes ?? row.totals?.llTaxes ?? row.recoveries?.taxes);
+          case 'camPSF':
+            return toNumber(row.tenantCam$ ?? row.recoveries?.cam ?? row.opEx?.cam ?? row.totals?.cam);
+          case 'camPSF_LL':
+            return toNumber(row.llCam$ ?? row.opEx?.cam ?? row.totals?.llCam ?? row.recoveries?.cam);
+          case 'insPSF':
+            return toNumber(row.tenantIns$ ?? row.recoveries?.ins ?? row.opEx?.ins ?? row.totals?.ins);
+          case 'insPSF_LL':
+            return toNumber(row.llIns$ ?? row.opEx?.ins ?? row.totals?.llIns ?? row.recoveries?.ins);
+          case 'mgmtPSF':
+            return toNumber(row.tenantMgmt$ ?? row.recoveries?.mgmt ?? row.opEx?.mgmt ?? row.totals?.mgmt);
+          case 'mgmtPSF_LL':
+            return toNumber(row.llMgmt$ ?? row.opEx?.mgmt ?? row.totals?.llMgmt ?? row.recoveries?.mgmt);
+          case 'otherPSF':
+            if (perspective === 'tenant') {
+              return toNumber(row.tenantOther$ ?? row.otherMonthly$Tenant ?? 0);
+            }
+            return toNumber(row.otherMonthly$LL ?? row.llOther$ ?? row.otherMonthly$Tenant ?? 0);
+          case 'otherPSF_LL':
+            return toNumber(row.otherMonthly$LL ?? row.llOther$ ?? 0);
+          default:
+            return 0;
+        }
+      };
+
       const weightForRow = (row) => {
         const w = Number(row.cashFactor);
         return Number.isFinite(w) && w > 0 ? w : 1;
@@ -3775,9 +3826,10 @@ window.addEventListener('load', initMap);
 
       const grouped = new Map();
       safeRows.forEach(row => {
-        const yr = row.year;
-        if (!grouped.has(yr)) grouped.set(yr, []);
-        grouped.get(yr).push(row);
+        const leaseYear = resolveLeaseYear(row);
+        const yearKey = leaseYear ?? (row.year ?? null);
+        if (!grouped.has(yearKey)) grouped.set(yearKey, []);
+        grouped.get(yearKey).push(row);
       });
 
       const sortedYears = Array.from(grouped.keys()).sort((a, b) => Number(a) - Number(b));
@@ -3802,26 +3854,41 @@ window.addEventListener('load', initMap);
       };
 
       const labelForGroup = (yearKey) => {
-        if (perspective === 'tenant') {
-          return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
-        }
-        return yearKey != null ? `Year ${yearKey}` : 'Year —';
+        return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
       };
 
       const resolveLeaseYear = (row) => {
-        if (perspective !== 'tenant') return row.year ?? null;
-        const periodNumber = toNumber(row.period);
-        if (!periodNumber) return null;
-        const computed = Math.ceil(periodNumber / 12);
-        return computed > 0 ? computed : null;
+        const derived = Number(row?.__leaseYear);
+        return Number.isFinite(derived) && derived > 0 ? derived : null;
       };
 
       const aggregatedRows = [];
-      let currentGroup = null;
       const grand = {
         hasAbated: false,
         totalAbatedMonths: 0
       };
+      const earliestLeaseMonth = (rows = []) => rows.reduce((min, row) => {
+        const monthIndex = toNumber(row.period);
+        if (!Number.isFinite(monthIndex) || monthIndex <= 0) return min;
+        if (min == null) return monthIndex;
+        return Math.min(min, monthIndex);
+      }, null);
+
+      const buildAggregatedRow = ({ partitionRows = [], yearRows = [], yearKey = null, isAbated = false, abatedMonthsFullYear = 0 }) => {
+        if (!partitionRows.length) return null;
+        const firstRow = partitionRows[0];
+        const monthCount = partitionRows.length;
+        const monthsInPeriod = yearRows.length;
+        const segmentValues = partitionRows
+          .map(r => Number(r.period) || 0)
+          .filter(val => val > 0);
+        const segMin = segmentValues.length ? Math.min(...segmentValues) : null;
+        const segMax = segmentValues.length ? Math.max(...segmentValues) : null;
+        const periodValues = yearRows
+          .map(r => Number(r.period) || 0)
+          .filter(val => val > 0);
+        const periodMin = periodValues.length ? Math.min(...periodValues) : null;
+        const periodMax = periodValues.length ? Math.max(...periodValues) : null;
 
       const flushGroup = (yearRows = []) => {
         if (!currentGroup) return;
@@ -3841,16 +3908,21 @@ window.addEventListener('load', initMap);
 
         const firstRow = groupRows[0];
         const monthCount = groupRows.length;
+        const monthsInSegment = currentGroup.months || groupRows.length;
         const aggRow = {
-          period: labelForGroup(yearKey),
+          period: periodMin != null && periodMax != null
+            ? (periodMin === periodMax ? String(periodMin) : `${periodMin}\u2013${periodMax}`)
+            : labelForGroup(yearKey),
           leaseYearLabel: labelForGroup(yearKey),
           year: yearKey ?? '',
           month: monthRangeLabel(startPeriod, endPeriod, monthCount),
           segmentLabel: monthRangeLabel(startPeriod, endPeriod, monthCount),
-          segmentMonthCount: monthCount,
+          segmentMonthCount: monthsInSegment,
           segmentStartPeriod: startPeriod,
           segmentEndPeriod: endPeriod,
-          spaceSize: firstRow?.spaceSize ?? 0,
+          spaceSize: (currentGroup.spaceSize > 0)
+            ? currentGroup.spaceSize
+            : (toNumber(firstRow?.spaceSize) || 0),
           cashFactor: firstRow?.cashFactor,
           isAbated,
           segmentKey: segmentKey || (isAbated ? 'abatement' : 'rent'),
@@ -3867,51 +3939,36 @@ window.addEventListener('load', initMap);
         const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (resolveIsAbated(row) ? 1 : 0), 0);
         const segmentAbatedMonths = groupRows.reduce((count, row) => count + (resolveIsAbated(row) ? 1 : 0), 0);
         aggRow.abatedMonths = abatedMonthsFullYear;
+        const segmentAbatedMonths = partitionRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
         aggRow.segmentAbatedMonths = segmentAbatedMonths;
-        if (segmentAbatedMonths > 0 || abatedMonthsFullYear > 0) grand.hasAbated = true;
-        grand.totalAbatedMonths += abatedMonthsFullYear;
 
-        const periodValues = yearRows
-          .map(r => Number(r.period) || 0)
-          .filter(val => val > 0);
-        if (periodValues.length) {
-          const minP = Math.min(...periodValues);
-          const maxP = Math.max(...periodValues);
-          aggRow.period = (minP === maxP) ? String(minP) : `${minP}\u2013${maxP}`;
-        }
-
-        const segmentValues = groupRows
-          .map(r => Number(r.period) || 0)
-          .filter(val => val > 0);
-        if (segmentValues.length) {
-          const segMin = Math.min(...segmentValues);
-          const segMax = Math.max(...segmentValues);
-          aggRow.segmentLabel = (segMin === segMax) ? String(segMin) : `${segMin}\u2013${segMax}`;
-        }
-
-        aggRow.__weightSum = groupRows.reduce((sum, row) => sum + weightForRow(row), 0);
-
-        safePsfKeys.forEach(key => {
-          if (key in firstRow) {
-            aggRow[key] = firstRow[key];
-          } else {
-            aggRow[key] = 0;
-          }
-        });
+        aggRow.__weightSum = partitionRows.reduce((sum, row) => sum + weightForRow(row), 0);
 
         safeSumKeys.forEach(key => {
-          const total = groupRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
-          aggRow[key] = total;
+          aggRow[key] = currentGroup.sumTotals?.[key] ?? 0;
         });
 
-        const abatementTotal = groupRows.reduce((sum, row) => sum + toNumber(row.abatement$ || 0), 0);
+        const monthsForPsf = aggRow.segmentMonthCount || 0;
+        const yearsForPsf = monthsForPsf / 12;
+        const areaForPsf = aggRow.spaceSize || 0;
+
+        safePsfKeys.forEach(key => {
+          const totalDollars = currentGroup.psfDollarTotals?.[key] ?? 0;
+          if (!areaForPsf || !yearsForPsf || Math.abs(totalDollars) <= 1e-9) {
+            aggRow[key] = 0;
+            return;
+          }
+          aggRow[key] = totalDollars / areaForPsf / yearsForPsf;
+        });
+
+        const abatementTotal = partitionRows.reduce((sum, row) => sum + toNumber(row.abatement$ || 0), 0);
         aggRow.abatement$ = abatementTotal;
         aggRow.abatementPSF = annualPSFFromDollars
           ? annualPSFFromDollars(abatementTotal, aggRow.spaceSize, aggRow.cashFactor)
           : 0;
 
-        aggregatedRows.push(aggRow);
-        currentGroup = null;
+        if (segmentAbatedMonths > 0 || abatedMonthsFullYear > 0) grand.hasAbated = true;
+        return aggRow;
       };
 
       sortedYears.forEach(year => {
@@ -3946,11 +4003,20 @@ window.addEventListener('load', initMap);
               psfValues: psfSnapshot,
               rows: [],
               startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
-              endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null
+              endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
+              sumTotals: Object.fromEntries(safeSumKeys.map(key => [key, 0])),
+              psfDollarTotals: Object.fromEntries(safePsfKeys.map(key => [key, 0])),
+              spaceSize: 0,
+              months: 0
             };
           }
 
           currentGroup.rows.push(row);
+          currentGroup.months += 1;
+          const rowSpace = toNumber(row.spaceSize);
+          if (rowSpace > 0) {
+            currentGroup.spaceSize = rowSpace;
+          }
           if (Number.isFinite(monthIndex) && monthIndex > 0) {
             if (!Number.isFinite(currentGroup.startPeriod) || currentGroup.startPeriod == null) {
               currentGroup.startPeriod = monthIndex;
@@ -3958,9 +4024,17 @@ window.addEventListener('load', initMap);
             currentGroup.endPeriod = monthIndex;
           }
           currentGroup.psfValues = psfSnapshot;
-        });
 
-        flushGroup(yearRows);
+          safeSumKeys.forEach(key => {
+            const prev = currentGroup.sumTotals?.[key] ?? 0;
+            currentGroup.sumTotals[key] = prev + toNumber(row[key]);
+          });
+
+          safePsfKeys.forEach(key => {
+            const prev = currentGroup.psfDollarTotals?.[key] ?? 0;
+            currentGroup.psfDollarTotals[key] = prev + psfDollarValue(row, key);
+          });
+        });
       });
 
       const sumTotals = Object.fromEntries(safeSumKeys.map(key => [key, 0]));
