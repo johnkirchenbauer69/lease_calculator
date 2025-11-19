@@ -464,7 +464,7 @@ function buildDoc(opts){
 
     const annualRows = (segmentRows.length
       ? segmentRows.map(seg => {
-          const leaseLabel = seg.leaseYearLabel || (seg.year != null ? `Year ${seg.year}` : '');
+          const leaseLabel = seg.leaseYearLabel || (seg.year != null ? `Lease Year ${seg.year}` : '');
           const segmentLabel = seg.segmentLabel || seg.period || '';
           const months = seg.segmentMonthCount ?? seg.__monthCount ?? 0;
           return `<tr>
@@ -487,7 +487,7 @@ function buildDoc(opts){
           const totNet = sum('netTotal');
           const totGross = sum('grossTotal');
           const abate = sum('freeBase$');
-          const leaseLabel = perspective === 'tenant' ? `Lease Year ${yr}` : `Year ${yr}`;
+          const leaseLabel = `Lease Year ${yr}`;
           return `<tr>
         <td>${leaseLabel}</td><td>Term</td><td>${fmtNum(months,0)}</td><td>${fmtNum(area,0)}</td><td>${fmtNum(ti,2)}</td>
         <td>${fmtNum(wNet,2)}</td><td>${fmtNum(wTax,2)}</td><td>${fmtNum(wCam,2)}</td><td>${fmtNum(wIns,2)}</td>
