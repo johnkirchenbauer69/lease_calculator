@@ -3783,6 +3783,15 @@ window.addEventListener('load', initMap);
       const sortedYears = Array.from(grouped.keys()).sort((a, b) => Number(a) - Number(b));
       const approxEqual = (a, b, epsilon = 1e-9) => Math.abs(a - b) <= epsilon;
       const baseRentKey = perspective === 'tenant' ? 'baseRentPSF' : 'baseRentPSF_LL';
+      const resolveIsAbated = (row) => {
+        if (!row || typeof row !== 'object') return false;
+        if (Object.prototype.hasOwnProperty.call(row, 'isAbated')) {
+          return !!row.isAbated;
+        }
+        const netValue = toNumber(row.monthlyNet$);
+        const baseValue = toNumber(row[baseRentKey]);
+        return Math.abs(netValue) <= 1e-9 || Math.abs(baseValue) <= 1e-9;
+      };
 
       const monthRangeLabel = (start, end, count) => {
         if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0) {
@@ -3816,7 +3825,15 @@ window.addEventListener('load', initMap);
 
       const flushGroup = (yearRows = []) => {
         if (!currentGroup) return;
-        const { rows: groupRows, startPeriod, endPeriod, yearKey, isAbated } = currentGroup;
+        const {
+          rows: groupRows,
+          startPeriod,
+          endPeriod,
+          yearKey,
+          isAbated,
+          segmentKey,
+          segmentOrder
+        } = currentGroup;
         if (!Array.isArray(groupRows) || groupRows.length === 0) {
           currentGroup = null;
           return;
@@ -3836,6 +3853,10 @@ window.addEventListener('load', initMap);
           spaceSize: firstRow?.spaceSize ?? 0,
           cashFactor: firstRow?.cashFactor,
           isAbated,
+          segmentKey: segmentKey || (isAbated ? 'abatement' : 'rent'),
+          segmentOrder: Number.isFinite(segmentOrder) ? segmentOrder : (isAbated ? 0 : 1),
+          segmentName: (segmentKey === 'abatement' || (segmentKey == null && isAbated)) ? 'Abatement' : 'Rent',
+          segmentIsAbated: !!isAbated,
           __monthCount: monthCount
         };
 
@@ -3843,8 +3864,8 @@ window.addEventListener('load', initMap);
         aggRow.month = `${monthsInPeriod} Months`;
         aggRow.__monthsInPeriod = monthsInPeriod;
 
-        const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
-        const segmentAbatedMonths = groupRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
+        const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (resolveIsAbated(row) ? 1 : 0), 0);
+        const segmentAbatedMonths = groupRows.reduce((count, row) => count + (resolveIsAbated(row) ? 1 : 0), 0);
         aggRow.abatedMonths = abatedMonthsFullYear;
         aggRow.segmentAbatedMonths = segmentAbatedMonths;
         if (segmentAbatedMonths > 0 || abatedMonthsFullYear > 0) grand.hasAbated = true;
@@ -3901,9 +3922,9 @@ window.addEventListener('load', initMap);
           const monthIndex = toNumber(row.period);
           const leaseYear = resolveLeaseYear(row);
           const yearKey = leaseYear ?? (row.year ?? null);
-          const baseRentValue = toNumber(row[baseRentKey]);
-          const netValue = toNumber(row.monthlyNet$);
-          const isAbated = Math.abs(netValue) <= 1e-9 || Math.abs(baseRentValue) <= 1e-9;
+          const isAbated = resolveIsAbated(row);
+          const segmentKey = isAbated ? 'abatement' : 'rent';
+          const segmentOrder = isAbated ? 0 : 1;
 
           const psfSnapshot = {};
           safePsfKeys.forEach(key => {
@@ -3912,7 +3933,7 @@ window.addEventListener('load', initMap);
 
           const shouldStartNew = !currentGroup
             || currentGroup.yearKey !== yearKey
-            || currentGroup.isAbated !== isAbated
+            || currentGroup.segmentKey !== segmentKey
             || safePsfKeys.some(key => !approxEqual(currentGroup.psfValues[key] ?? 0, psfSnapshot[key] ?? 0));
 
           if (shouldStartNew) {
@@ -3920,6 +3941,8 @@ window.addEventListener('load', initMap);
             currentGroup = {
               yearKey,
               isAbated,
+              segmentKey,
+              segmentOrder,
               psfValues: psfSnapshot,
               rows: [],
               startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
