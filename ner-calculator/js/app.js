@@ -3800,18 +3800,12 @@ window.addEventListener('load', initMap);
       };
 
       const labelForGroup = (yearKey) => {
-        if (perspective === 'tenant') {
-          return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
-        }
-        return yearKey != null ? `Year ${yearKey}` : 'Year —';
+        return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
       };
 
       const resolveLeaseYear = (row) => {
-        if (perspective !== 'tenant') return row.year ?? null;
-        const periodNumber = toNumber(row.period);
-        if (!periodNumber) return null;
-        const computed = Math.ceil(periodNumber / 12);
-        return computed > 0 ? computed : null;
+        const derived = Number(row?.__leaseYear);
+        return Number.isFinite(derived) && derived > 0 ? derived : null;
       };
 
       const aggregatedRows = [];

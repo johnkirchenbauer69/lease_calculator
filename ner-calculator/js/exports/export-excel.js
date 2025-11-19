@@ -360,7 +360,7 @@
 
     if (segmentRows.length) {
       segmentRows.forEach(seg => {
-        const leaseLabel = seg.leaseYearLabel || (seg.year != null ? `Year ${seg.year}` : '');
+        const leaseLabel = seg.leaseYearLabel || (seg.year != null ? `Lease Year ${seg.year}` : '');
         const segmentLabel = seg.segmentLabel || seg.period || '';
         const months = seg.segmentMonthCount ?? seg.__monthCount ?? 0;
         shA.addRow({
@@ -393,7 +393,7 @@
         const totNet = sum('netTotal');
         const totGross = sum('grossTotal');
         const abate = sum('freeBase$');
-        const leaseLabel = perspective === 'tenant' ? `Lease Year ${yr}` : `Year ${yr}`;
+        const leaseLabel = `Lease Year ${yr}`;
 
         shA.addRow({
           leaseYear: leaseLabel,
