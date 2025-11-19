@@ -3252,6 +3252,11 @@ window.addEventListener('load', initMap);
           monthlyGross$: displayGross$,
           isAbated: !!row.isAbated,
           abatement$,
+          tenantTaxes$: taxes$,
+          tenantCam$: cam$,
+          tenantIns$: ins$,
+          tenantMgmt$: mgmt$,
+          tenantOther$: other$,
           otherMonthly$Tenant: other$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
           opEx: row.opEx,
@@ -3361,6 +3366,16 @@ window.addEventListener('load', initMap);
           isAbated: !!row.isAbated,
           abatement$,
           baseCollected: baseCollected$,
+          tenantTaxes$: taxesRecovery,
+          tenantCam$: camRecovery,
+          tenantIns$: insRecovery,
+          tenantMgmt$: mgmtRecovery,
+          tenantOther$: otherTenant$,
+          llTaxes$: llTaxes$,
+          llCam$: llCam$,
+          llIns$: llIns$,
+          llMgmt$: llMgmt$,
+          llOther$: llOther$,
           otherMonthly$Tenant: otherTenant$,
           otherMonthly$LL: llOther$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
@@ -3748,6 +3763,42 @@ window.addEventListener('load', initMap);
         return Number.isFinite(n) ? n : 0;
       };
 
+      const psfDollarValue = (row, key) => {
+        switch (key) {
+          case 'baseRentPSF':
+          case 'baseRentPSF_LL':
+            return toNumber(row.baseCollected ?? row.monthlyNet$ ?? row.totals?.monthlyNet);
+          case 'grossPSF':
+          case 'grossPSF_LL':
+            return toNumber(row.monthlyGross$ ?? row.totals?.monthlyGross ?? row.totals?.monthlyCashOut ?? row.totals?.totalCashIn);
+          case 'taxesPSF':
+            return toNumber(row.tenantTaxes$ ?? row.recoveries?.taxes ?? row.opEx?.taxes ?? row.totals?.taxes);
+          case 'taxesPSF_LL':
+            return toNumber(row.llTaxes$ ?? row.opEx?.taxes ?? row.totals?.llTaxes ?? row.recoveries?.taxes);
+          case 'camPSF':
+            return toNumber(row.tenantCam$ ?? row.recoveries?.cam ?? row.opEx?.cam ?? row.totals?.cam);
+          case 'camPSF_LL':
+            return toNumber(row.llCam$ ?? row.opEx?.cam ?? row.totals?.llCam ?? row.recoveries?.cam);
+          case 'insPSF':
+            return toNumber(row.tenantIns$ ?? row.recoveries?.ins ?? row.opEx?.ins ?? row.totals?.ins);
+          case 'insPSF_LL':
+            return toNumber(row.llIns$ ?? row.opEx?.ins ?? row.totals?.llIns ?? row.recoveries?.ins);
+          case 'mgmtPSF':
+            return toNumber(row.tenantMgmt$ ?? row.recoveries?.mgmt ?? row.opEx?.mgmt ?? row.totals?.mgmt);
+          case 'mgmtPSF_LL':
+            return toNumber(row.llMgmt$ ?? row.opEx?.mgmt ?? row.totals?.llMgmt ?? row.recoveries?.mgmt);
+          case 'otherPSF':
+            if (perspective === 'tenant') {
+              return toNumber(row.tenantOther$ ?? row.otherMonthly$Tenant ?? 0);
+            }
+            return toNumber(row.otherMonthly$LL ?? row.llOther$ ?? row.otherMonthly$Tenant ?? 0);
+          case 'otherPSF_LL':
+            return toNumber(row.otherMonthly$LL ?? row.llOther$ ?? 0);
+          default:
+            return 0;
+        }
+      };
+
       const weightForRow = (row) => {
         const w = Number(row.cashFactor);
         return Number.isFinite(w) && w > 0 ? w : 1;
@@ -3836,22 +3887,34 @@ window.addEventListener('load', initMap);
         const periodMin = periodValues.length ? Math.min(...periodValues) : null;
         const periodMax = periodValues.length ? Math.max(...periodValues) : null;
 
+      const flushGroup = (yearRows = []) => {
+        if (!currentGroup) return;
+        const { rows: groupRows, startPeriod, endPeriod, yearKey, isAbated } = currentGroup;
+        if (!Array.isArray(groupRows) || groupRows.length === 0) {
+          currentGroup = null;
+          return;
+        }
+
+        const firstRow = groupRows[0];
+        const monthCount = groupRows.length;
+        const monthsInSegment = currentGroup.months || groupRows.length;
         const aggRow = {
           period: periodMin != null && periodMax != null
             ? (periodMin === periodMax ? String(periodMin) : `${periodMin}\u2013${periodMax}`)
             : labelForGroup(yearKey),
           leaseYearLabel: labelForGroup(yearKey),
           year: yearKey ?? '',
-          month: `${monthsInPeriod} Months`,
-          segmentLabel: monthRangeLabel(segMin, segMax, monthCount),
-          segmentMonthCount: monthCount,
-          segmentStartPeriod: segMin,
-          segmentEndPeriod: segMax,
-          spaceSize: firstRow?.spaceSize ?? 0,
+          month: monthRangeLabel(startPeriod, endPeriod, monthCount),
+          segmentLabel: monthRangeLabel(startPeriod, endPeriod, monthCount),
+          segmentMonthCount: monthsInSegment,
+          segmentStartPeriod: startPeriod,
+          segmentEndPeriod: endPeriod,
+          spaceSize: (currentGroup.spaceSize > 0)
+            ? currentGroup.spaceSize
+            : (toNumber(firstRow?.spaceSize) || 0),
           cashFactor: firstRow?.cashFactor,
           isAbated,
-          __monthCount: monthCount,
-          __monthsInPeriod: monthsInPeriod
+          __monthCount: monthsInSegment
         };
 
         aggRow.abatedMonths = abatedMonthsFullYear;
@@ -3860,14 +3923,21 @@ window.addEventListener('load', initMap);
 
         aggRow.__weightSum = partitionRows.reduce((sum, row) => sum + weightForRow(row), 0);
 
-        safePsfKeys.forEach(key => {
-          const weightedTotal = partitionRows.reduce((sum, row) => sum + toNumber(row[key]) * weightForRow(row), 0);
-          aggRow[key] = aggRow.__weightSum ? (weightedTotal / aggRow.__weightSum) : 0;
+        safeSumKeys.forEach(key => {
+          aggRow[key] = currentGroup.sumTotals?.[key] ?? 0;
         });
 
-        safeSumKeys.forEach(key => {
-          const total = partitionRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
-          aggRow[key] = total;
+        const monthsForPsf = aggRow.segmentMonthCount || 0;
+        const yearsForPsf = monthsForPsf / 12;
+        const areaForPsf = aggRow.spaceSize || 0;
+
+        safePsfKeys.forEach(key => {
+          const totalDollars = currentGroup.psfDollarTotals?.[key] ?? 0;
+          if (!areaForPsf || !yearsForPsf || Math.abs(totalDollars) <= 1e-9) {
+            aggRow[key] = 0;
+            return;
+          }
+          aggRow[key] = totalDollars / areaForPsf / yearsForPsf;
         });
 
         const abatementTotal = partitionRows.reduce((sum, row) => sum + toNumber(row.abatement$ || 0), 0);
@@ -3884,45 +3954,50 @@ window.addEventListener('load', initMap);
         const yearRows = grouped.get(yearKey) || [];
         if (!yearRows.length) return;
 
-        const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
-        grand.totalAbatedMonths += abatedMonthsFullYear;
-        if (abatedMonthsFullYear > 0) grand.hasAbated = true;
+          const shouldStartNew = !currentGroup
+            || currentGroup.yearKey !== yearKey
+            || currentGroup.isAbated !== isAbated
+            || safePsfKeys.some(key => !approxEqual(currentGroup.psfValues[key] ?? 0, psfSnapshot[key] ?? 0));
 
-        const abatedRows = yearRows.filter(row => !!row.isAbated);
-        const rentRows = yearRows.filter(row => !row.isAbated);
-
-        const rentPartition = rentRows.length
-          ? { rows: rentRows, isAbated: false, earliest: earliestLeaseMonth(rentRows) }
-          : null;
-        const abatedPartition = abatedRows.length
-          ? { rows: abatedRows, isAbated: true, earliest: earliestLeaseMonth(abatedRows) }
-          : null;
-
-        const partitions = [];
-        if (rentPartition) partitions.push(rentPartition);
-        if (abatedPartition) partitions.push(abatedPartition);
-
-        if (partitions.length > 2) {
-          throw new Error(`Lease year ${labelForGroup(yearKey)} exceeded segment limit.`);
-        }
-
-        let orderedPartitions = partitions;
-        if (rentPartition && abatedPartition) {
-          const abatedFirst = (abatedPartition.earliest ?? Infinity) < (rentPartition.earliest ?? Infinity);
-          orderedPartitions = abatedFirst ? [abatedPartition, rentPartition] : [rentPartition, abatedPartition];
-        }
-
-        orderedPartitions.forEach(partition => {
-          const aggRow = buildAggregatedRow({
-            partitionRows: partition.rows,
-            yearRows,
-            yearKey,
-            isAbated: partition.isAbated,
-            abatedMonthsFullYear
-          });
-          if (aggRow) {
-            aggregatedRows.push(aggRow);
+          if (shouldStartNew) {
+            flushGroup(yearRows);
+            currentGroup = {
+              yearKey,
+              isAbated,
+              psfValues: psfSnapshot,
+              rows: [],
+              startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
+              endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
+              sumTotals: Object.fromEntries(safeSumKeys.map(key => [key, 0])),
+              psfDollarTotals: Object.fromEntries(safePsfKeys.map(key => [key, 0])),
+              spaceSize: 0,
+              months: 0
+            };
           }
+
+          currentGroup.rows.push(row);
+          currentGroup.months += 1;
+          const rowSpace = toNumber(row.spaceSize);
+          if (rowSpace > 0) {
+            currentGroup.spaceSize = rowSpace;
+          }
+          if (Number.isFinite(monthIndex) && monthIndex > 0) {
+            if (!Number.isFinite(currentGroup.startPeriod) || currentGroup.startPeriod == null) {
+              currentGroup.startPeriod = monthIndex;
+            }
+            currentGroup.endPeriod = monthIndex;
+          }
+          currentGroup.psfValues = psfSnapshot;
+
+          safeSumKeys.forEach(key => {
+            const prev = currentGroup.sumTotals?.[key] ?? 0;
+            currentGroup.sumTotals[key] = prev + toNumber(row[key]);
+          });
+
+          safePsfKeys.forEach(key => {
+            const prev = currentGroup.psfDollarTotals?.[key] ?? 0;
+            currentGroup.psfDollarTotals[key] = prev + psfDollarValue(row, key);
+          });
         });
       });
 
