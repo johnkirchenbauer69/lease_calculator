@@ -3396,6 +3396,115 @@ window.addEventListener('load', initMap);
         ? buildTenantSchedule(model)
         : buildLandlordSchedule(model);
     }
+
+    function buildYearlyAbatementRows(monthlyRows = []) {
+      if (!Array.isArray(monthlyRows) || monthlyRows.length === 0) return [];
+
+      const toNumber = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const ensureMonthIndex = (row, idx) => {
+        const raw = Number(row?.period);
+        if (Number.isFinite(raw) && raw > 0) return raw;
+        return idx + 1;
+      };
+
+      const createAggregate = (leaseYear, key) => ({
+        leaseYear,
+        segmentKey: key,
+        segment: key === 'abatement' ? 'Abatement' : 'Rent',
+        months: 0,
+        base: 0,
+        taxes: 0,
+        cam: 0,
+        ins: 0,
+        mgmt: 0,
+        totalNet: 0,
+        totalGross: 0,
+        abatement: 0,
+        spaceSF: 0
+      });
+
+      const addRowToAggregate = (agg, row) => {
+        if (!agg || !row) return;
+        agg.months += 1;
+        agg.base += toNumber(row.baseCollected ?? row.monthlyNet$ ?? row.totals?.monthlyNet);
+        const recoveries = row.recoveries || {};
+        agg.taxes += toNumber(recoveries.taxes ?? row.totals?.taxes ?? row.opEx?.taxes);
+        agg.cam += toNumber(recoveries.cam ?? row.totals?.cam ?? row.opEx?.cam);
+        agg.ins += toNumber(recoveries.ins ?? row.totals?.ins ?? row.opEx?.ins);
+        agg.mgmt += toNumber(recoveries.mgmt ?? row.totals?.mgmt ?? row.opEx?.mgmt);
+        agg.totalNet += toNumber(row.monthlyNet$ ?? row.totals?.monthlyNet);
+        agg.totalGross += toNumber(row.monthlyGross$ ?? row.totals?.monthlyGross ?? row.totals?.monthlyCashOut);
+        agg.abatement += toNumber(row.totals?.freeRent ?? row.freeRent ?? row.totals?.freeRentValue);
+
+        const space = toNumber(row.spaceSize);
+        if (space > 0 && agg.spaceSF <= 0) {
+          agg.spaceSF = space;
+        }
+      };
+
+      const aggregates = new Map();
+
+      monthlyRows.forEach((row, idx) => {
+        if (!row) return;
+        const leaseMonth = Math.max(1, ensureMonthIndex(row, idx));
+        const leaseYear = 1 + Math.floor((leaseMonth - 1) / 12);
+        const key = row.isAbated ? 'abatement' : 'rent';
+        const entry = aggregates.get(leaseYear) || { rent: null, abatement: null };
+        if (!entry[key]) {
+          entry[key] = createAggregate(leaseYear, key);
+        }
+        addRowToAggregate(entry[key], row);
+        aggregates.set(leaseYear, entry);
+      });
+
+      const finalizeAggregate = (agg) => {
+        if (!agg) return null;
+        const months = Math.max(0, agg.months);
+        const totalGross = toNumber(agg.totalGross);
+        const space = toNumber(agg.spaceSF);
+        let grossPerSFPerYr = 0;
+        if (totalGross !== 0 && space > 0 && months > 0) {
+          const years = months / 12;
+          if (years > 0) {
+            grossPerSFPerYr = totalGross / space / years;
+          }
+        }
+        return {
+          leaseYear: agg.leaseYear,
+          segment: agg.segment,
+          months,
+          base: agg.base,
+          taxes: agg.taxes,
+          cam: agg.cam,
+          ins: agg.ins,
+          mgmt: agg.mgmt,
+          totalNet: agg.totalNet,
+          totalGross,
+          abatement: agg.abatement,
+          spaceSF: space,
+          grossPerSFPerYr
+        };
+      };
+
+      const years = Array.from(aggregates.keys()).sort((a, b) => a - b);
+      const rows = [];
+      years.forEach(year => {
+        const entry = aggregates.get(year);
+        if (!entry) return;
+        if (entry.abatement && entry.abatement.months > 0) {
+          rows.push(finalizeAggregate(entry.abatement));
+        }
+        if (entry.rent && entry.rent.months > 0) {
+          rows.push(finalizeAggregate(entry.rent));
+        }
+      });
+
+      return rows.filter(Boolean);
+    }
   
     function buildMonthlyColumns(model, perspective) {
       const coreModes = model?.coreOpExModes || {};
@@ -3639,295 +3748,85 @@ window.addEventListener('load', initMap);
   function renderAnnual(data, table, thead, tbody) {
     table.classList.add('annual-view');
     table.classList.remove('monthly-sub-view');
-  
+
     const perspective = activePerspective || 'landlord';
     const monthlyRows = buildMonthlyRows(data, perspective);
-  
+
     if (!Array.isArray(monthlyRows) || monthlyRows.length === 0) {
       thead.innerHTML = '';
       tbody.innerHTML = '';
       return;
     }
-  
-    const schema = buildMonthlyColumns(data, perspective).map(col => ({ ...col }));
 
-    const abatementChipHTML = (ctx = {}) => {
-      if (!ctx || !ctx.isAbated) return '';
-      const count = Number(ctx.abatedMonths);
-      const monthsText = Number.isFinite(count) && count > 0
-        ? `${count} month${count === 1 ? '' : 's'} abated`
-        : 'Abated period';
-      const safeTitle = monthsText.replace(/"/g, '&quot;');
-      return `<span class="chip chip-abated" title="${safeTitle}">Abated</span>`;
-    };
+    const annualRows = buildYearlyAbatementRows(monthlyRows);
 
-    let monthColIndex = -1;
-
-    schema.forEach(col => {
-      if (col.key === 'monthlyNet$') {
-        col.label = 'Total Net Rent ($)';
-        if (col.headerHTML) {
-          col.headerHTML = col.headerHTML.replace(/Monthly Net Rent/gi, 'Total Net Rent');
-        }
-        col.render = (row) => fmtUSD(Number(row.monthlyNet$ || 0));
-      } else if (col.key === 'monthlyGross$') {
-        col.label = 'Total Gross Rent ($)';
-        if (col.headerHTML) {
-          col.headerHTML = col.headerHTML.replace(/Monthly Gross Rent/gi, 'Total Gross Rent');
-        }
-        col.render = (row) => fmtUSD(Number(row.monthlyGross$ || 0));
-      } else if (col.key === 'month') {
-        col.label = 'Months';
-        if (col.headerHTML) {
-          col.headerHTML = col.headerHTML.replace(/Month/gi, 'Months');
-        }
-        col.render = (row) => row.month;
-      }
-    });
-
-    const abatementColumn = {
-      key: 'abatement',
-      label: 'Abatement',
-      headerHTML: 'Abatement',
-      className: 'cell-abatement',
-      render: (row) => (row?.isAbated ? 'Abated' : ''),
-      renderHTML: (row) => abatementChipHTML(row)
-    };
-
-    if (monthColIndex !== -1) {
-      schema.splice(monthColIndex + 1, 0, abatementColumn);
-    } else {
-      schema.push(abatementColumn);
+    if (!annualRows.length) {
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+      return;
     }
-  
+
+    const currencyRenderer = (key) => (row) => fmtUSD(Number(row?.[key] || 0));
+    const schema = [
+      { key: 'leaseYear', label: 'Lease Year', render: (row) => row?.leaseYear ?? '', isLabel: true },
+      { key: 'segment', label: 'Segment', render: (row) => row?.segment || EM_DASH },
+      { key: 'months', label: 'Months', render: (row) => `${Number(row?.months || 0)}` },
+      { key: 'base', label: 'Base', render: currencyRenderer('base'), className: 'cell-dollar' },
+      { key: 'taxes', label: 'Taxes', render: currencyRenderer('taxes'), className: 'cell-dollar' },
+      { key: 'cam', label: 'CAM', render: currencyRenderer('cam'), className: 'cell-dollar' },
+      { key: 'ins', label: 'Insurance', render: currencyRenderer('ins'), className: 'cell-dollar' },
+      { key: 'mgmt', label: 'Mgmt Fee', render: currencyRenderer('mgmt'), className: 'cell-dollar' },
+      { key: 'totalNet', label: 'Total Net', render: currencyRenderer('totalNet'), className: 'cell-dollar' },
+      { key: 'totalGross', label: 'Total Gross', render: currencyRenderer('totalGross'), className: 'cell-dollar' },
+      { key: 'abatement', label: 'Abatement', render: currencyRenderer('abatement'), className: 'cell-dollar' },
+      {
+        key: 'psf',
+        label: '$/SF/yr',
+        render: (row) => {
+          if (!row || Number(row.totalGross) === 0) return '$0.00/SF/yr';
+          return `${fmtUSD(Number(row.grossPerSFPerYr) || 0)}/SF/yr`;
+        },
+        className: 'cell-dollar'
+      }
+    ];
+
     renderTableHeader(schema, thead);
-  
+
     tbody.innerHTML = '';
-  
+
     const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
-    const psfKeys = schema.filter(col => col.isPSF && col.key).map(col => col.key);
-    const sumKeys = schema.filter(col => typeof col.sum === 'function').map(col => col.key);
+    const totalFields = ['months', 'base', 'taxes', 'cam', 'ins', 'mgmt', 'totalNet', 'totalGross', 'abatement'];
+    const totals = Object.fromEntries(totalFields.map(key => [key, 0]));
 
-    const toNumber = (value) => {
-      const n = Number(value);
-      return Number.isFinite(n) ? n : 0;
-    };
-  
-    const weightForRow = (row) => {
-      const w = Number(row.cashFactor);
-      return Number.isFinite(w) && w > 0 ? w : 1;
-    };
-  
-    const grouped = new Map();
-    monthlyRows.forEach(row => {
-      const yr = row.year;
-      if (!grouped.has(yr)) grouped.set(yr, []);
-      grouped.get(yr).push(row);
-    });
-  
-    const sortedYears = Array.from(grouped.keys()).sort((a, b) => Number(a) - Number(b));
-  
-    const grand = {
-      weight: 0,
-      psfWeighted: Object.fromEntries(psfKeys.map(key => [key, 0])),
-      totals: Object.fromEntries(sumKeys.map(key => [key, 0])),
-      hasAbated: false,
-      totalAbatedMonths: 0
-    };
-
-    const approxEqual = (a, b, epsilon = 1e-9) => Math.abs(a - b) <= epsilon;
-
-    const baseRentKey = perspective === 'tenant' ? 'baseRentPSF' : 'baseRentPSF_LL';
-
-    const monthRangeLabel = (start, end, count) => {
-      if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0) {
-        return (start === end) ? `${start}` : `${start}\u2013${end}`;
-      }
-      if (count === 1) return '1';
-      return `${count}`;
-    };
-
-    const labelForGroup = (yearKey) => {
-      if (perspective === 'tenant') {
-        return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
-      }
-      return yearKey != null ? `Year ${yearKey}` : 'Year —';
-    };
-
-    const resolveLeaseYear = (row) => {
-      if (perspective !== 'tenant') return row.year ?? null;
-      const periodNumber = toNumber(row.period);
-      if (!periodNumber) return null;
-      const computed = Math.ceil(periodNumber / 12);
-      return computed > 0 ? computed : null;
-    };
-
-    const aggregatedRows = [];
-    let currentGroup = null;
-
-    const flushGroup = (yearRows = []) => {
-      if (!currentGroup) return;
-      const { rows: groupRows, startPeriod, endPeriod, yearKey, isAbated } = currentGroup;
-      if (!Array.isArray(groupRows) || groupRows.length === 0) {
-        currentGroup = null;
-        return;
-      }
-
-      const firstRow = groupRows[0];
-      const monthCount = groupRows.length;
-      const aggRow = {
-        period: labelForGroup(yearKey),
-        year: yearKey ?? '',
-        month: monthRangeLabel(startPeriod, endPeriod, monthCount),
-        spaceSize: firstRow?.spaceSize ?? 0,
-        cashFactor: firstRow?.cashFactor,
-        isAbated,
-        __monthCount: monthCount
-      };
-
-      const monthsInPeriod = yearRows.length;
-      aggRow.month = `${monthsInPeriod} Months`;
-
-      const abatedMonths = yearRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
-      const isAbatedPeriod = abatedMonths > 0;
-      aggRow.isAbated = isAbatedPeriod;
-      aggRow.abatedMonths = abatedMonths;
-      if (isAbatedPeriod) grand.hasAbated = true;
-      grand.totalAbatedMonths += abatedMonths;
-
-      const periodValues = yearRows
-        .map(r => Number(r.period) || 0)
-        .filter(val => val > 0);
-      if (periodValues.length) {
-        const minP = Math.min(...periodValues);
-        const maxP = Math.max(...periodValues);
-        aggRow.period = (minP === maxP) ? String(minP) : `${minP}\u2013${maxP}`;
-      }
-
-      aggRow.__monthsInPeriod = monthsInPeriod;
-      aggRow.__weightSum = yearRows.reduce((sum, row) => sum + weightForRow(row), 0);
-
-      psfKeys.forEach(key => {
-        if (key in firstRow) {
-          aggRow[key] = firstRow[key];
-        } else {
-          aggRow[key] = 0;
-        }
-      });
-
-      sumKeys.forEach(key => {
-        const total = groupRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
-        aggRow[key] = total;
-      });
-
-      aggregatedRows.push(aggRow);
-      currentGroup = null;
-    };
-
-    sortedYears.forEach(year => {
-      const yearRows = grouped.get(year) || [];
-
-      currentGroup = null;
-
-      yearRows.forEach(row => {
-        const monthIndex = toNumber(row.period);
-        const leaseYear = resolveLeaseYear(row);
-        const yearKey = leaseYear ?? (row.year ?? null);
-        const baseRentValue = toNumber(row[baseRentKey]);
-        const netValue = toNumber(row.monthlyNet$);
-        const isAbated = Math.abs(netValue) <= 1e-9 || Math.abs(baseRentValue) <= 1e-9;
-
-        const psfSnapshot = {};
-        psfKeys.forEach(key => {
-          psfSnapshot[key] = toNumber(row[key]);
-        });
-
-        const shouldStartNew = !currentGroup
-          || currentGroup.yearKey !== yearKey
-          || currentGroup.isAbated !== isAbated
-          || psfKeys.some(key => !approxEqual(currentGroup.psfValues[key] ?? 0, psfSnapshot[key] ?? 0));
-
-        if (shouldStartNew) {
-          flushGroup(yearRows);
-          currentGroup = {
-            yearKey,
-            isAbated,
-            psfValues: psfSnapshot,
-            rows: [],
-            startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
-            endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null
-          };
-        }
-
-        currentGroup.rows.push(row);
-        if (Number.isFinite(monthIndex) && monthIndex > 0) {
-          if (!Number.isFinite(currentGroup.startPeriod) || currentGroup.startPeriod == null) {
-            currentGroup.startPeriod = monthIndex;
-          }
-          currentGroup.endPeriod = monthIndex;
-        }
-        currentGroup.psfValues = psfSnapshot;
-      });
-
-      flushGroup(yearRows);
-    });
-
-    const grandTotals = Object.fromEntries(sumKeys.map(key => [key, 0]));
-
-    aggregatedRows.forEach(aggRow => {
+    annualRows.forEach(row => {
       const tr = document.createElement('tr');
-      schema.forEach((col, idx) => {
+      schema.forEach(col => {
         const td = document.createElement('td');
         if (col.className) {
           col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
         }
-
-        const htmlContent = typeof col.renderHTML === 'function' ? (col.renderHTML(aggRow) || '') : '';
-
-        if (htmlContent) {
-          td.innerHTML = htmlContent;
-          if (col.key === abatementColumn.key && aggRow.abatedMonths > 0) {
-            const count = aggRow.abatedMonths;
-            const label = `${count} month${count === 1 ? '' : 's'} abated`;
-            td.setAttribute('aria-label', label);
-          }
-        } else {
-          let textContent = '';
-          if (col.key === 'spaceSize') {
-            textContent = (Number(aggRow.spaceSize || 0)).toLocaleString();
-          } else if (typeof col.render === 'function') {
-            textContent = col.render(aggRow);
-          }
-          td.textContent = textContent ?? '';
-        }
-
+        const value = typeof col.render === 'function' ? col.render(row) : '';
+        td.textContent = value == null ? '' : value;
         tr.appendChild(td);
-        if (sumKeys.includes(col.key)) {
-          grandTotals[col.key] += toNumber(aggRow[col.key]);
-        }
       });
       tbody.appendChild(tr);
 
-      grand.weight += Number(aggRow.__weightSum || 0);
-      if (monthColIndex !== -1) {
-        const monthColKey = schema[monthColIndex]?.key;
-        if (monthColKey) {
-          const monthsInPeriod = Number(aggRow.__monthsInPeriod || 0);
-          grand.totals[monthColKey] = (grand.totals[monthColKey] || 0) + monthsInPeriod;
-        }
+      totalFields.forEach(key => {
+        const increment = Number(row?.[key] || 0);
+        totals[key] += Number.isFinite(increment) ? increment : 0;
+      });
+    });
+
+    const spaceForTotals = annualRows.find(r => Number(r.spaceSF) > 0)?.spaceSF || 0;
+    const totalGross = totals.totalGross || 0;
+    const totalMonths = totals.months || 0;
+    let totalPSF = 0;
+    if (totalGross !== 0 && spaceForTotals > 0 && totalMonths > 0) {
+      const years = totalMonths / 12;
+      if (years > 0) {
+        totalPSF = totalGross / spaceForTotals / years;
       }
-    });
-
-    const totalMonths = aggregatedRows.reduce((sum, row) => sum + (Number(row.__monthCount) || 0), 0);
-
-    const totalWeight = monthlyRows.reduce((sum, row) => sum + weightForRow(row), 0);
-    const psfWeightedTotals = Object.fromEntries(psfKeys.map(key => [key, 0]));
-    psfKeys.forEach(key => {
-      const weighted = monthlyRows.reduce((sum, row) => {
-        return sum + toNumber(row[key]) * weightForRow(row);
-      }, 0);
-      psfWeightedTotals[key] = weighted;
-    });
+    }
 
     const grandRow = document.createElement('tr');
     grandRow.classList.add('grand-total', 'row-grandtotal');
@@ -3940,29 +3839,15 @@ window.addEventListener('load', initMap);
 
       if (idx === labelColIdx) {
         td.textContent = 'Grand Total';
-      } else if (psfKeys.includes(col.key)) {
-        const avg = totalWeight ? (psfWeightedTotals[col.key] / totalWeight) : 0;
-        td.textContent = fmtUSD(avg);
-      } else if (sumKeys.includes(col.key)) {
-        td.textContent = fmtUSD(grandTotals[col.key]);
-        td.classList.add('cell-dollar');
-      } else if (col.key === 'month') {
-        td.textContent = `${totalMonths} Months`;
-      } else if (col.key === abatementColumn.key) {
-        const html = abatementColumn.renderHTML({
-          isAbated: grand.hasAbated,
-          abatedMonths: grand.totalAbatedMonths
-        });
-        if (html) {
-          td.innerHTML = html;
-          if (grand.totalAbatedMonths > 0) {
-            const count = grand.totalAbatedMonths;
-            const label = `${count} month${count === 1 ? '' : 's'} abated`;
-            td.setAttribute('aria-label', label);
-          }
-        } else {
-          td.textContent = '';
-        }
+      } else if (col.key === 'segment') {
+        td.textContent = EM_DASH;
+        td.classList.add('cell-muted');
+      } else if (col.key === 'months') {
+        td.textContent = `${totalMonths}`;
+      } else if (totalFields.includes(col.key)) {
+        td.textContent = fmtUSD(totals[col.key]);
+      } else if (col.key === 'psf') {
+        td.textContent = totalGross === 0 ? '$0.00/SF/yr' : `${fmtUSD(totalPSF)}/SF/yr`;
       } else {
         td.textContent = EM_DASH;
         td.classList.add('cell-muted');
@@ -3973,7 +3858,7 @@ window.addEventListener('load', initMap);
 
     tbody.appendChild(grandRow);
   }
-  
+
   // -----------------------------------------------------------------------
   // Monthly + Subotals Rent Schedule Table
   // -----------------------------------------------------------------------
