@@ -402,7 +402,7 @@ function buildDoc(opts){
     const headerMonthly = ['Year','Month','Space Size (SF)','TI ($/SF)','Net Rent ($/SF/yr)','Taxes ($/SF/yr)','CAM ($/SF/yr)','Insurance ($/SF/yr)','Gross Rent ($/SF/yr)','Net Rent (Total)','Gross Rent (Total)'];
     const thsMonthly = headerMonthly.map(h=>`<th>${h}</th>`).join('');
 
-    const headerAnnual = ['Year','Months','Space Size (SF)','TI ($/SF)','Net Rent ($/SF)','Taxes ($/SF)','CAM ($/SF)','Insurance ($/SF)','Gross Rent ($/SF)','Monthly Net Rent','Total Net Rent','Monthly Gross Rent','Total Gross Rent'];
+    const headerAnnual = ['Lease Year','Segment','Months','Space Size (SF)','TI ($/SF)','Net Rent ($/SF/yr)','Taxes ($/SF/yr)','CAM ($/SF/yr)','Insurance ($/SF/yr)','Gross Rent ($/SF/yr)','Abatement ($)','Total Net Rent','Total Gross Rent'];
     const thsAnnual = headerAnnual.map(h=>`<th>${h}</th>`).join('');
 
     // KPIs
@@ -450,26 +450,50 @@ function buildDoc(opts){
       const by = new Map(); rows.forEach(r=>{ if(!by.has(r.calYear)) by.set(r.calYear,[]); by.get(r.calYear).push(r); }); return by;
     }
     const by = groupByYear(rows);
+    const perspective = (data.perspective === 'tenant') ? 'tenant' : 'landlord';
+    const rollup = (typeof window.buildYearlyAbatementRows === 'function')
+      ? window.buildYearlyAbatementRows(data, perspective)
+      : null;
+    const segmentRows = Array.isArray(rollup?.rows) ? rollup.rows : [];
+    const netKey = perspective === 'tenant' ? 'baseRentPSF' : 'baseRentPSF_LL';
+    const taxKey = perspective === 'tenant' ? 'taxesPSF' : 'taxesPSF_LL';
+    const camKey = perspective === 'tenant' ? 'camPSF' : 'camPSF_LL';
+    const insKey = perspective === 'tenant' ? 'insPSF' : 'insPSF_LL';
+    const grossKey = perspective === 'tenant' ? 'grossPSF' : 'grossPSF_LL';
+    const tiValue = Number(data.tiPerSF_forDisplay) || 0;
 
-    // Annual summary rows (unchanged)
-    const annualRows = Array.from(by.entries()).map(([yr, arr])=>{
-      const months = arr.length, area = arr[0].area, ti = arr[0].ti;
-      const wNet = arr.reduce((s,r)=> s + r.contractNetAnnualPSF,0)/months;
-      const wTax = arr.reduce((s,r)=> s + r.contractTaxesAnnualPSF,0)/months;
-      const wCam = arr.reduce((s,r)=> s + r.contractCamAnnualPSF,0)/months;
-      const wIns = arr.reduce((s,r)=> s + r.contractInsAnnualPSF,0)/months;
-      const wGross = wNet+wTax+wCam+wIns;
-      const mNet = arr.reduce((s,r)=> s+r.netTotal,0)/months;
-      const totNet = arr.reduce((s,r)=> s+r.netTotal,0);
-      const mGross = arr.reduce((s,r)=> s+r.grossTotal,0)/months;
-      const totGross = arr.reduce((s,r)=> s+r.grossTotal,0);
-      return `<tr>
-        <td>${yr}</td><td>${months}</td><td>${fmtNum(area,0)}</td><td>${fmtNum(ti,2)}</td>
-        <td>${fmtNum(wNet,2)}</td><td>${fmtNum(wTax,2)}</td><td>${fmtNum(wCam,2)}</td><td>${fmtNum(wIns,2)}</td>
-        <td>${fmtNum(wGross,2)}</td><td>${fmtUSD(mNet)}</td><td>${fmtUSD(totNet)}</td>
-        <td>${fmtUSD(mGross)}</td><td>${fmtUSD(totGross)}</td>
+    const annualRows = (segmentRows.length
+      ? segmentRows.map(seg => {
+          const leaseLabel = seg.leaseYearLabel || (seg.year != null ? `Year ${seg.year}` : '');
+          const segmentLabel = seg.segmentLabel || seg.period || '';
+          const months = seg.segmentMonthCount ?? seg.__monthCount ?? 0;
+          return `<tr>
+        <td>${leaseLabel}</td><td>${segmentLabel}</td><td>${fmtNum(months,0)}</td><td>${fmtNum(seg.spaceSize || 0,0)}</td><td>${fmtNum(tiValue,2)}</td>
+        <td>${fmtNum(seg[netKey] || 0,2)}</td><td>${fmtNum(seg[taxKey] || 0,2)}</td><td>${fmtNum(seg[camKey] || 0,2)}</td><td>${fmtNum(seg[insKey] || 0,2)}</td>
+        <td>${fmtNum(seg[grossKey] || 0,2)}</td><td>${fmtUSD(seg.abatement$ || 0)}</td><td>${fmtUSD(seg.monthlyNet$ || 0)}</td><td>${fmtUSD(seg.monthlyGross$ || 0)}</td>
       </tr>`;
-    }).join('');
+        }).join('')
+      : Array.from(by.entries()).map(([yr, arr]) => {
+          if (!arr.length) return '';
+          const months = arr.length;
+          const area = arr[0].area;
+          const ti = arr[0].ti ?? tiValue;
+          const sum = (k) => arr.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+          const wNet = sum('contractNetAnnualPSF') / months;
+          const wTax = sum('contractTaxesAnnualPSF') / months;
+          const wCam = sum('contractCamAnnualPSF') / months;
+          const wIns = sum('contractInsAnnualPSF') / months;
+          const wGross = wNet + wTax + wCam + wIns;
+          const totNet = sum('netTotal');
+          const totGross = sum('grossTotal');
+          const abate = sum('freeBase$');
+          const leaseLabel = perspective === 'tenant' ? `Lease Year ${yr}` : `Year ${yr}`;
+          return `<tr>
+        <td>${leaseLabel}</td><td>Term</td><td>${fmtNum(months,0)}</td><td>${fmtNum(area,0)}</td><td>${fmtNum(ti,2)}</td>
+        <td>${fmtNum(wNet,2)}</td><td>${fmtNum(wTax,2)}</td><td>${fmtNum(wCam,2)}</td><td>${fmtNum(wIns,2)}</td>
+        <td>${fmtNum(wGross,2)}</td><td>${fmtUSD(abate)}</td><td>${fmtUSD(totNet)}</td><td>${fmtUSD(totGross)}</td>
+      </tr>`;
+        }).join(''));
 
     // Monthly + Subtotals (monthly rows annualized PSFs + per-year subtotal)
     const monthlySubRows = Array.from(by.entries()).map(([yr, arr])=>{
