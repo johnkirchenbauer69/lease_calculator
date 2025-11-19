@@ -3400,6 +3400,115 @@ window.addEventListener('load', initMap);
         ? buildTenantSchedule(model)
         : buildLandlordSchedule(model);
     }
+
+    function buildYearlyAbatementRows(monthlyRows = []) {
+      if (!Array.isArray(monthlyRows) || monthlyRows.length === 0) return [];
+
+      const toNumber = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+      };
+
+      const ensureMonthIndex = (row, idx) => {
+        const raw = Number(row?.period);
+        if (Number.isFinite(raw) && raw > 0) return raw;
+        return idx + 1;
+      };
+
+      const createAggregate = (leaseYear, key) => ({
+        leaseYear,
+        segmentKey: key,
+        segment: key === 'abatement' ? 'Abatement' : 'Rent',
+        months: 0,
+        base: 0,
+        taxes: 0,
+        cam: 0,
+        ins: 0,
+        mgmt: 0,
+        totalNet: 0,
+        totalGross: 0,
+        abatement: 0,
+        spaceSF: 0
+      });
+
+      const addRowToAggregate = (agg, row) => {
+        if (!agg || !row) return;
+        agg.months += 1;
+        agg.base += toNumber(row.baseCollected ?? row.monthlyNet$ ?? row.totals?.monthlyNet);
+        const recoveries = row.recoveries || {};
+        agg.taxes += toNumber(recoveries.taxes ?? row.totals?.taxes ?? row.opEx?.taxes);
+        agg.cam += toNumber(recoveries.cam ?? row.totals?.cam ?? row.opEx?.cam);
+        agg.ins += toNumber(recoveries.ins ?? row.totals?.ins ?? row.opEx?.ins);
+        agg.mgmt += toNumber(recoveries.mgmt ?? row.totals?.mgmt ?? row.opEx?.mgmt);
+        agg.totalNet += toNumber(row.monthlyNet$ ?? row.totals?.monthlyNet);
+        agg.totalGross += toNumber(row.monthlyGross$ ?? row.totals?.monthlyGross ?? row.totals?.monthlyCashOut);
+        agg.abatement += toNumber(row.totals?.freeRent ?? row.freeRent ?? row.totals?.freeRentValue);
+
+        const space = toNumber(row.spaceSize);
+        if (space > 0 && agg.spaceSF <= 0) {
+          agg.spaceSF = space;
+        }
+      };
+
+      const aggregates = new Map();
+
+      monthlyRows.forEach((row, idx) => {
+        if (!row) return;
+        const leaseMonth = Math.max(1, ensureMonthIndex(row, idx));
+        const leaseYear = 1 + Math.floor((leaseMonth - 1) / 12);
+        const key = row.isAbated ? 'abatement' : 'rent';
+        const entry = aggregates.get(leaseYear) || { rent: null, abatement: null };
+        if (!entry[key]) {
+          entry[key] = createAggregate(leaseYear, key);
+        }
+        addRowToAggregate(entry[key], row);
+        aggregates.set(leaseYear, entry);
+      });
+
+      const finalizeAggregate = (agg) => {
+        if (!agg) return null;
+        const months = Math.max(0, agg.months);
+        const totalGross = toNumber(agg.totalGross);
+        const space = toNumber(agg.spaceSF);
+        let grossPerSFPerYr = 0;
+        if (totalGross !== 0 && space > 0 && months > 0) {
+          const years = months / 12;
+          if (years > 0) {
+            grossPerSFPerYr = totalGross / space / years;
+          }
+        }
+        return {
+          leaseYear: agg.leaseYear,
+          segment: agg.segment,
+          months,
+          base: agg.base,
+          taxes: agg.taxes,
+          cam: agg.cam,
+          ins: agg.ins,
+          mgmt: agg.mgmt,
+          totalNet: agg.totalNet,
+          totalGross,
+          abatement: agg.abatement,
+          spaceSF: space,
+          grossPerSFPerYr
+        };
+      };
+
+      const years = Array.from(aggregates.keys()).sort((a, b) => a - b);
+      const rows = [];
+      years.forEach(year => {
+        const entry = aggregates.get(year);
+        if (!entry) return;
+        if (entry.abatement && entry.abatement.months > 0) {
+          rows.push(finalizeAggregate(entry.abatement));
+        }
+        if (entry.rent && entry.rent.months > 0) {
+          rows.push(finalizeAggregate(entry.rent));
+        }
+      });
+
+      return rows.filter(Boolean);
+    }
   
     function buildMonthlyColumns(model, perspective) {
       const coreModes = model?.coreOpExModes || {};
@@ -3894,27 +4003,15 @@ window.addEventListener('load', initMap);
   function renderAnnual(data, table, thead, tbody) {
     table.classList.add('annual-view');
     table.classList.remove('monthly-sub-view');
-  
+
     const perspective = activePerspective || 'landlord';
     const monthlyRows = buildMonthlyRows(data, perspective);
-  
+
     if (!Array.isArray(monthlyRows) || monthlyRows.length === 0) {
       thead.innerHTML = '';
       tbody.innerHTML = '';
       return;
     }
-  
-    const schema = buildMonthlyColumns(data, perspective).map(col => ({ ...col }));
-
-    const abatementChipHTML = (ctx = {}) => {
-      if (!ctx || !ctx.isAbated) return '';
-      const count = Number(ctx.abatedMonths);
-      const monthsText = Number.isFinite(count) && count > 0
-        ? `${count} month${count === 1 ? '' : 's'} abated`
-        : 'Abated period';
-      const safeTitle = monthsText.replace(/"/g, '&quot;');
-      return `<span class="chip chip-abated" title="${safeTitle}">Abated</span>`;
-    };
 
     let monthColIndex = -1;
 
@@ -3941,19 +4038,10 @@ window.addEventListener('load', initMap);
       }
     });
 
-    const abatementColumn = {
-      key: 'abatement',
-      label: 'Abatement',
-      headerHTML: 'Abatement',
-      className: 'cell-abatement',
-      render: (row) => (row?.isAbated ? 'Abated' : ''),
-      renderHTML: (row) => abatementChipHTML(row)
-    };
-
-    if (monthColIndex !== -1) {
-      schema.splice(monthColIndex + 1, 0, abatementColumn);
-    } else {
-      schema.push(abatementColumn);
+    if (!annualRows.length) {
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+      return;
     }
   
     renderTableHeader(schema, thead);
@@ -3992,33 +4080,15 @@ window.addEventListener('load', initMap);
     const totalAbatedMonths = Number(totals.abatedMonths) || 0;
     const hasAbated = !!totals.hasAbated;
 
-    aggregatedRows.forEach(aggRow => {
+    annualRows.forEach(row => {
       const tr = document.createElement('tr');
-      schema.forEach((col, idx) => {
+      schema.forEach(col => {
         const td = document.createElement('td');
         if (col.className) {
           col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
         }
-
-        const htmlContent = typeof col.renderHTML === 'function' ? (col.renderHTML(aggRow) || '') : '';
-
-        if (htmlContent) {
-          td.innerHTML = htmlContent;
-          if (col.key === abatementColumn.key && aggRow.abatedMonths > 0) {
-            const count = aggRow.abatedMonths;
-            const label = `${count} month${count === 1 ? '' : 's'} abated`;
-            td.setAttribute('aria-label', label);
-          }
-        } else {
-          let textContent = '';
-          if (col.key === 'spaceSize') {
-            textContent = (Number(aggRow.spaceSize || 0)).toLocaleString();
-          } else if (typeof col.render === 'function') {
-            textContent = col.render(aggRow);
-          }
-          td.textContent = textContent ?? '';
-        }
-
+        const value = typeof col.render === 'function' ? col.render(row) : '';
+        td.textContent = value == null ? '' : value;
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -4068,7 +4138,7 @@ window.addEventListener('load', initMap);
 
     tbody.appendChild(grandRow);
   }
-  
+
   // -----------------------------------------------------------------------
   // Monthly + Subotals Rent Schedule Table
   // -----------------------------------------------------------------------
