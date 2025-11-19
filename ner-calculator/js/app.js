@@ -4038,16 +4038,6 @@ window.addEventListener('load', initMap);
       }
     });
 
-    if (!annualRows.length) {
-      thead.innerHTML = '';
-      tbody.innerHTML = '';
-      return;
-    }
-  
-    renderTableHeader(schema, thead);
-  
-    tbody.innerHTML = '';
-  
     const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
     const psfKeyCandidates = schema.filter(col => col.isPSF && col.key).map(col => col.key);
     const sumKeyCandidates = schema.filter(col => typeof col.sum === 'function').map(col => col.key);
@@ -4065,12 +4055,17 @@ window.addEventListener('load', initMap);
     const sumKeys = (Array.isArray(rollup?.sumKeys) && rollup.sumKeys.length)
       ? rollup.sumKeys
       : sumKeyCandidates;
+    const annualRows = aggregatedRows;
 
-    if (!aggregatedRows.length) {
+    if (!annualRows.length) {
       thead.innerHTML = '';
       tbody.innerHTML = '';
       return;
     }
+
+    renderTableHeader(schema, thead);
+
+    tbody.innerHTML = '';
 
     const totals = rollup?.totals || {};
     const grandTotals = totals.sumByKey || Object.fromEntries(sumKeys.map(key => [key, 0]));
