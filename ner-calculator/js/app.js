@@ -3252,6 +3252,11 @@ window.addEventListener('load', initMap);
           monthlyGross$: displayGross$,
           isAbated: !!row.isAbated,
           abatement$,
+          tenantTaxes$: taxes$,
+          tenantCam$: cam$,
+          tenantIns$: ins$,
+          tenantMgmt$: mgmt$,
+          tenantOther$: other$,
           otherMonthly$Tenant: other$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
           opEx: row.opEx,
@@ -3361,6 +3366,16 @@ window.addEventListener('load', initMap);
           isAbated: !!row.isAbated,
           abatement$,
           baseCollected: baseCollected$,
+          tenantTaxes$: taxesRecovery,
+          tenantCam$: camRecovery,
+          tenantIns$: insRecovery,
+          tenantMgmt$: mgmtRecovery,
+          tenantOther$: otherTenant$,
+          llTaxes$: llTaxes$,
+          llCam$: llCam$,
+          llIns$: llIns$,
+          llMgmt$: llMgmt$,
+          llOther$: llOther$,
           otherMonthly$Tenant: otherTenant$,
           otherMonthly$LL: llOther$,
           totals: row.totals ? { ...row.totals, ...rowTotals } : rowTotals,
@@ -3748,6 +3763,42 @@ window.addEventListener('load', initMap);
         return Number.isFinite(n) ? n : 0;
       };
 
+      const psfDollarValue = (row, key) => {
+        switch (key) {
+          case 'baseRentPSF':
+          case 'baseRentPSF_LL':
+            return toNumber(row.baseCollected ?? row.monthlyNet$ ?? row.totals?.monthlyNet);
+          case 'grossPSF':
+          case 'grossPSF_LL':
+            return toNumber(row.monthlyGross$ ?? row.totals?.monthlyGross ?? row.totals?.monthlyCashOut ?? row.totals?.totalCashIn);
+          case 'taxesPSF':
+            return toNumber(row.tenantTaxes$ ?? row.recoveries?.taxes ?? row.opEx?.taxes ?? row.totals?.taxes);
+          case 'taxesPSF_LL':
+            return toNumber(row.llTaxes$ ?? row.opEx?.taxes ?? row.totals?.llTaxes ?? row.recoveries?.taxes);
+          case 'camPSF':
+            return toNumber(row.tenantCam$ ?? row.recoveries?.cam ?? row.opEx?.cam ?? row.totals?.cam);
+          case 'camPSF_LL':
+            return toNumber(row.llCam$ ?? row.opEx?.cam ?? row.totals?.llCam ?? row.recoveries?.cam);
+          case 'insPSF':
+            return toNumber(row.tenantIns$ ?? row.recoveries?.ins ?? row.opEx?.ins ?? row.totals?.ins);
+          case 'insPSF_LL':
+            return toNumber(row.llIns$ ?? row.opEx?.ins ?? row.totals?.llIns ?? row.recoveries?.ins);
+          case 'mgmtPSF':
+            return toNumber(row.tenantMgmt$ ?? row.recoveries?.mgmt ?? row.opEx?.mgmt ?? row.totals?.mgmt);
+          case 'mgmtPSF_LL':
+            return toNumber(row.llMgmt$ ?? row.opEx?.mgmt ?? row.totals?.llMgmt ?? row.recoveries?.mgmt);
+          case 'otherPSF':
+            if (perspective === 'tenant') {
+              return toNumber(row.tenantOther$ ?? row.otherMonthly$Tenant ?? 0);
+            }
+            return toNumber(row.otherMonthly$LL ?? row.llOther$ ?? row.otherMonthly$Tenant ?? 0);
+          case 'otherPSF_LL':
+            return toNumber(row.otherMonthly$LL ?? row.llOther$ ?? 0);
+          default:
+            return 0;
+        }
+      };
+
       const weightForRow = (row) => {
         const w = Number(row.cashFactor);
         return Number.isFinite(w) && w > 0 ? w : 1;
@@ -3824,19 +3875,22 @@ window.addEventListener('load', initMap);
 
         const firstRow = groupRows[0];
         const monthCount = groupRows.length;
+        const monthsInSegment = currentGroup.months || groupRows.length;
         const aggRow = {
           period: labelForGroup(yearKey),
           leaseYearLabel: labelForGroup(yearKey),
           year: yearKey ?? '',
           month: monthRangeLabel(startPeriod, endPeriod, monthCount),
           segmentLabel: monthRangeLabel(startPeriod, endPeriod, monthCount),
-          segmentMonthCount: monthCount,
+          segmentMonthCount: monthsInSegment,
           segmentStartPeriod: startPeriod,
           segmentEndPeriod: endPeriod,
-          spaceSize: firstRow?.spaceSize ?? 0,
+          spaceSize: (currentGroup.spaceSize > 0)
+            ? currentGroup.spaceSize
+            : (toNumber(firstRow?.spaceSize) || 0),
           cashFactor: firstRow?.cashFactor,
           isAbated,
-          __monthCount: monthCount
+          __monthCount: monthsInSegment
         };
 
         const monthsInPeriod = yearRows.length;
@@ -3870,17 +3924,21 @@ window.addEventListener('load', initMap);
 
         aggRow.__weightSum = groupRows.reduce((sum, row) => sum + weightForRow(row), 0);
 
-        safePsfKeys.forEach(key => {
-          if (key in firstRow) {
-            aggRow[key] = firstRow[key];
-          } else {
-            aggRow[key] = 0;
-          }
+        safeSumKeys.forEach(key => {
+          aggRow[key] = currentGroup.sumTotals?.[key] ?? 0;
         });
 
-        safeSumKeys.forEach(key => {
-          const total = groupRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
-          aggRow[key] = total;
+        const monthsForPsf = aggRow.segmentMonthCount || 0;
+        const yearsForPsf = monthsForPsf / 12;
+        const areaForPsf = aggRow.spaceSize || 0;
+
+        safePsfKeys.forEach(key => {
+          const totalDollars = currentGroup.psfDollarTotals?.[key] ?? 0;
+          if (!areaForPsf || !yearsForPsf || Math.abs(totalDollars) <= 1e-9) {
+            aggRow[key] = 0;
+            return;
+          }
+          aggRow[key] = totalDollars / areaForPsf / yearsForPsf;
         });
 
         const abatementTotal = groupRows.reduce((sum, row) => sum + toNumber(row.abatement$ || 0), 0);
@@ -3923,11 +3981,20 @@ window.addEventListener('load', initMap);
               psfValues: psfSnapshot,
               rows: [],
               startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
-              endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null
+              endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
+              sumTotals: Object.fromEntries(safeSumKeys.map(key => [key, 0])),
+              psfDollarTotals: Object.fromEntries(safePsfKeys.map(key => [key, 0])),
+              spaceSize: 0,
+              months: 0
             };
           }
 
           currentGroup.rows.push(row);
+          currentGroup.months += 1;
+          const rowSpace = toNumber(row.spaceSize);
+          if (rowSpace > 0) {
+            currentGroup.spaceSize = rowSpace;
+          }
           if (Number.isFinite(monthIndex) && monthIndex > 0) {
             if (!Number.isFinite(currentGroup.startPeriod) || currentGroup.startPeriod == null) {
               currentGroup.startPeriod = monthIndex;
@@ -3935,6 +4002,16 @@ window.addEventListener('load', initMap);
             currentGroup.endPeriod = monthIndex;
           }
           currentGroup.psfValues = psfSnapshot;
+
+          safeSumKeys.forEach(key => {
+            const prev = currentGroup.sumTotals?.[key] ?? 0;
+            currentGroup.sumTotals[key] = prev + toNumber(row[key]);
+          });
+
+          safePsfKeys.forEach(key => {
+            const prev = currentGroup.psfDollarTotals?.[key] ?? 0;
+            currentGroup.psfDollarTotals[key] = prev + psfDollarValue(row, key);
+          });
         });
 
         flushGroup(yearRows);
