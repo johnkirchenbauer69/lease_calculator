@@ -328,43 +328,89 @@
     // ===== Annual (month-weighted) =====
     const shA = wb.addWorksheet('Yearly + Abatement', { properties: { defaultRowHeight: 18 } });
     const colsA = [
-      { h: 'Year', k: 'year', w: 8, f: fmtInt },
+      { h: 'Lease Year', k: 'leaseYear', w: 16 },
+      { h: 'Segment', k: 'segment', w: 16 },
       { h: 'Months', k: 'months', w: 10, f: fmtInt },
       { h: 'Space Size (SF)', k: 'area', w: 16, f: fmtInt },
       { h: 'Allowance Applied ($/SF)', k: 'ti', w: 22, f: fmtPSF },
-      { h: 'Net Rent ($/SF)', k: 'netpsf', w: 16, f: fmtPSF },
-      { h: 'Taxes ($/SF)', k: 'taxpsf', w: 16, f: fmtPSF },
-      { h: 'CAM ($/SF)', k: 'campsf', w: 16, f: fmtPSF },
-      { h: 'Insurance ($/SF)', k: 'inspsf', w: 18, f: fmtPSF },
-      { h: 'Gross Rent ($/SF)', k: 'grosspsf', w: 18, f: fmtPSF },
-      { h: 'Monthly Net Rent', k: 'mnet', w: 18, f: fmtMoney },
-      { h: 'Total Net Rent', k: 'totnet', w: 18, f: fmtMoney },
-      { h: 'Monthly Gross Rent', k: 'mgross', w: 20, f: fmtMoney },
+      { h: 'Net Rent ($/SF/yr)', k: 'netpsf', w: 18, f: fmtPSF },
+      { h: 'Taxes ($/SF/yr)', k: 'taxpsf', w: 18, f: fmtPSF },
+      { h: 'CAM ($/SF/yr)', k: 'campsf', w: 18, f: fmtPSF },
+      { h: 'Insurance ($/SF/yr)', k: 'inspsf', w: 20, f: fmtPSF },
+      { h: 'Gross Rent ($/SF/yr)', k: 'grosspsf', w: 20, f: fmtPSF },
+      { h: 'Abatement ($)', k: 'abatement', w: 18, f: fmtMoney },
+      { h: 'Total Net Rent', k: 'totnet', w: 20, f: fmtMoney },
       { h: 'Total Gross Rent', k: 'totgross', w: 20, f: fmtMoney },
     ];
     setCols(shA, colsA);
     addHeaderRow(shA, colsA.map(d => d.h));
 
     const byYear = groupByYear(data.schedule);
-    for (const [yr, arr] of byYear.entries()) {
-      const months = arr.length;
-      const area = num(arr[0].area);
-      const sum = (k) => arr.reduce((s, r) => s + num(r[k]), 0);
-      const wNet = sum('contractNetAnnualPSF')   / months;
-      const wTax = sum('contractTaxesAnnualPSF') / months;
-      const wCam = sum('contractCamAnnualPSF')   / months;
-      const wIns = sum('contractInsAnnualPSF')   / months;
-      const wGross = wNet + wTax + wCam + wIns;
-      const totNet   = sum('netTotal');
-      const totGross = sum('grossTotal');
+    const perspective = (data.perspective === 'tenant') ? 'tenant' : 'landlord';
+    const rollup = (typeof window.buildYearlyAbatementRows === 'function')
+      ? window.buildYearlyAbatementRows(data, perspective)
+      : null;
+    const segmentRows = Array.isArray(rollup?.rows) ? rollup.rows : [];
+    const netKey = perspective === 'tenant' ? 'baseRentPSF' : 'baseRentPSF_LL';
+    const taxKey = perspective === 'tenant' ? 'taxesPSF' : 'taxesPSF_LL';
+    const camKey = perspective === 'tenant' ? 'camPSF' : 'camPSF_LL';
+    const insKey = perspective === 'tenant' ? 'insPSF' : 'insPSF_LL';
+    const grossKey = perspective === 'tenant' ? 'grossPSF' : 'grossPSF_LL';
+    const tiValue = num(data.tiPerSF_forDisplay);
 
-      shA.addRow({
-        year: +yr, months, area,
-        ti: num(data.tiPerSF_forDisplay),
-        netpsf: wNet, taxpsf: wTax, campsf: wCam, inspsf: wIns, grosspsf: wGross,
-        mnet: totNet / months, totnet: totNet,
-        mgross: totGross / months, totgross: totGross,
+    if (segmentRows.length) {
+      segmentRows.forEach(seg => {
+        const leaseLabel = seg.leaseYearLabel || (seg.year != null ? `Year ${seg.year}` : '');
+        const segmentLabel = seg.segmentLabel || seg.period || '';
+        const months = seg.segmentMonthCount ?? seg.__monthCount ?? 0;
+        shA.addRow({
+          leaseYear: leaseLabel,
+          segment: segmentLabel,
+          months,
+          area: num(seg.spaceSize),
+          ti: tiValue,
+          netpsf: num(seg[netKey]),
+          taxpsf: num(seg[taxKey]),
+          campsf: num(seg[camKey]),
+          inspsf: num(seg[insKey]),
+          grosspsf: num(seg[grossKey]),
+          abatement: num(seg.abatement$),
+          totnet: num(seg.monthlyNet$),
+          totgross: num(seg.monthlyGross$)
+        });
       });
+    } else {
+      for (const [yr, arr] of byYear.entries()) {
+        if (!Array.isArray(arr) || !arr.length) continue;
+        const months = arr.length;
+        const area = num(arr[0].area);
+        const sum = (k) => arr.reduce((s, r) => s + num(r[k]), 0);
+        const wNet = sum('contractNetAnnualPSF') / months;
+        const wTax = sum('contractTaxesAnnualPSF') / months;
+        const wCam = sum('contractCamAnnualPSF') / months;
+        const wIns = sum('contractInsAnnualPSF') / months;
+        const wGross = wNet + wTax + wCam + wIns;
+        const totNet = sum('netTotal');
+        const totGross = sum('grossTotal');
+        const abate = sum('freeBase$');
+        const leaseLabel = perspective === 'tenant' ? `Lease Year ${yr}` : `Year ${yr}`;
+
+        shA.addRow({
+          leaseYear: leaseLabel,
+          segment: 'Term',
+          months,
+          area,
+          ti: tiValue,
+          netpsf: wNet,
+          taxpsf: wTax,
+          campsf: wCam,
+          inspsf: wIns,
+          grosspsf: wGross,
+          abatement: abate,
+          totnet: totNet,
+          totgross: totGross
+        });
+      }
     }
     shA.views = [{ state: 'frozen', ySplit: 1 }];
 
