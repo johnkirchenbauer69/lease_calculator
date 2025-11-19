@@ -3890,6 +3890,20 @@ window.addEventListener('load', initMap);
         const periodMin = periodValues.length ? Math.min(...periodValues) : null;
         const periodMax = periodValues.length ? Math.max(...periodValues) : null;
 
+        return {
+          firstRow,
+          monthCount,
+          monthsInPeriod,
+          segmentStart: segMin,
+          segmentEnd: segMax,
+          periodStart: periodMin,
+          periodEnd: periodMax,
+          yearKey,
+          isAbated,
+          abatedMonthsFullYear
+        };
+      };
+
       const flushGroup = (yearRows = []) => {
         if (!currentGroup) return;
         const {
@@ -3939,7 +3953,6 @@ window.addEventListener('load', initMap);
         const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (resolveIsAbated(row) ? 1 : 0), 0);
         const segmentAbatedMonths = groupRows.reduce((count, row) => count + (resolveIsAbated(row) ? 1 : 0), 0);
         aggRow.abatedMonths = abatedMonthsFullYear;
-        const segmentAbatedMonths = partitionRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
         aggRow.segmentAbatedMonths = segmentAbatedMonths;
 
         aggRow.__weightSum = partitionRows.reduce((sum, row) => sum + weightForRow(row), 0);
