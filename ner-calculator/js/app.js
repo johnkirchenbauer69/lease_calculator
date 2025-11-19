@@ -3774,10 +3774,26 @@ window.addEventListener('load', initMap);
       }
 
       const grouped = new Map();
-      safeRows.forEach(row => {
-        const yr = row.year;
-        if (!grouped.has(yr)) grouped.set(yr, []);
-        grouped.get(yr).push(row);
+      const leaseYearOverages = new Set();
+      safeRows.forEach((row = {}, index) => {
+        const periodNumber = toNumber(row.period);
+        const fallbackMonth = index + 1;
+        const leaseMonth = (Number.isFinite(periodNumber) && periodNumber > 0)
+          ? periodNumber
+          : fallbackMonth;
+        const leaseYear = 1 + Math.floor(Math.max(leaseMonth - 1, 0) / 12);
+
+        row.__leaseMonth = leaseMonth;
+        row.__leaseYear = leaseYear;
+
+        if (!grouped.has(leaseYear)) grouped.set(leaseYear, []);
+        const yearBucket = grouped.get(leaseYear);
+        yearBucket.push(row);
+
+        if (devGuardsEnabled && yearBucket.length > 12 && !leaseYearOverages.has(leaseYear)) {
+          leaseYearOverages.add(leaseYear);
+          console.warn(`[LeaseYearGuard] Lease Year ${leaseYear} has ${yearBucket.length} periods.`, yearBucket);
+        }
       });
 
       const sortedYears = Array.from(grouped.keys()).sort((a, b) => Number(a) - Number(b));
@@ -3793,18 +3809,12 @@ window.addEventListener('load', initMap);
       };
 
       const labelForGroup = (yearKey) => {
-        if (perspective === 'tenant') {
-          return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
-        }
-        return yearKey != null ? `Year ${yearKey}` : 'Year —';
+        return yearKey != null ? `Lease Year ${yearKey}` : 'Lease Year —';
       };
 
       const resolveLeaseYear = (row) => {
-        if (perspective !== 'tenant') return row.year ?? null;
-        const periodNumber = toNumber(row.period);
-        if (!periodNumber) return null;
-        const computed = Math.ceil(periodNumber / 12);
-        return computed > 0 ? computed : null;
+        const derived = Number(row?.__leaseYear);
+        return Number.isFinite(derived) && derived > 0 ? derived : null;
       };
 
       const aggregatedRows = [];
@@ -3851,7 +3861,7 @@ window.addEventListener('load', initMap);
         grand.totalAbatedMonths += abatedMonthsFullYear;
 
         const periodValues = yearRows
-          .map(r => Number(r.period) || 0)
+          .map(r => Number(r.__leaseMonth) || 0)
           .filter(val => val > 0);
         if (periodValues.length) {
           const minP = Math.min(...periodValues);
@@ -3860,7 +3870,7 @@ window.addEventListener('load', initMap);
         }
 
         const segmentValues = groupRows
-          .map(r => Number(r.period) || 0)
+          .map(r => Number(r.__leaseMonth) || 0)
           .filter(val => val > 0);
         if (segmentValues.length) {
           const segMin = Math.min(...segmentValues);
@@ -3894,13 +3904,16 @@ window.addEventListener('load', initMap);
       };
 
       sortedYears.forEach(year => {
-        const yearRows = grouped.get(year) || [];
+        const yearRows = (grouped.get(year) || []).slice().sort((a, b) => {
+          const aMonth = Number(a?.__leaseMonth) || 0;
+          const bMonth = Number(b?.__leaseMonth) || 0;
+          return aMonth - bMonth;
+        });
         currentGroup = null;
 
         yearRows.forEach(row => {
-          const monthIndex = toNumber(row.period);
-          const leaseYear = resolveLeaseYear(row);
-          const yearKey = leaseYear ?? (row.year ?? null);
+          const monthIndex = Number(row.__leaseMonth);
+          const yearKey = resolveLeaseYear(row);
           const baseRentValue = toNumber(row[baseRentKey]);
           const netValue = toNumber(row.monthlyNet$);
           const isAbated = Math.abs(netValue) <= 1e-9 || Math.abs(baseRentValue) <= 1e-9;
