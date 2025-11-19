@@ -3758,105 +3758,69 @@ window.addEventListener('load', initMap);
       return;
     }
 
-    const annualRows = buildYearlyAbatementRows(monthlyRows);
+    const monthColIndex = schema.findIndex(col => col.key === 'month');
+
+    schema.forEach(col => {
+      if (col.key === 'monthlyNet$') {
+        col.label = 'Total Net Rent ($)';
+        if (col.headerHTML) {
+          col.headerHTML = col.headerHTML.replace(/Monthly Net Rent/gi, 'Total Net Rent');
+        }
+        col.render = (row) => fmtUSD(Number(row.monthlyNet$ || 0));
+      } else if (col.key === 'monthlyGross$') {
+        col.label = 'Total Gross Rent ($)';
+        if (col.headerHTML) {
+          col.headerHTML = col.headerHTML.replace(/Monthly Gross Rent/gi, 'Total Gross Rent');
+        }
+        col.render = (row) => fmtUSD(Number(row.monthlyGross$ || 0));
+      } else if (col.key === 'month') {
+        col.label = 'Months';
+        if (col.headerHTML) {
+          col.headerHTML = col.headerHTML.replace(/Month/gi, 'Months');
+        }
+        col.render = (row) => row.month;
+      }
+    });
 
     if (!annualRows.length) {
       thead.innerHTML = '';
       tbody.innerHTML = '';
       return;
     }
-
-    const currencyRenderer = (key) => (row) => fmtUSD(Number(row?.[key] || 0));
-    const schema = [
-      { key: 'leaseYear', label: 'Lease Year', render: (row) => row?.leaseYear ?? '', isLabel: true },
-      { key: 'segment', label: 'Segment', render: (row) => row?.segment || EM_DASH },
-      { key: 'months', label: 'Months', render: (row) => `${Number(row?.months || 0)}` },
-      { key: 'base', label: 'Base', render: currencyRenderer('base'), className: 'cell-dollar' },
-      { key: 'taxes', label: 'Taxes', render: currencyRenderer('taxes'), className: 'cell-dollar' },
-      { key: 'cam', label: 'CAM', render: currencyRenderer('cam'), className: 'cell-dollar' },
-      { key: 'ins', label: 'Insurance', render: currencyRenderer('ins'), className: 'cell-dollar' },
-      { key: 'mgmt', label: 'Mgmt Fee', render: currencyRenderer('mgmt'), className: 'cell-dollar' },
-      { key: 'totalNet', label: 'Total Net', render: currencyRenderer('totalNet'), className: 'cell-dollar' },
-      { key: 'totalGross', label: 'Total Gross', render: currencyRenderer('totalGross'), className: 'cell-dollar' },
-      { key: 'abatement', label: 'Abatement', render: currencyRenderer('abatement'), className: 'cell-dollar' },
-      {
-        key: 'psf',
-        label: '$/SF/yr',
-        render: (row) => {
-          if (!row || Number(row.totalGross) === 0) return '$0.00/SF/yr';
-          return `${fmtUSD(Number(row.grossPerSFPerYr) || 0)}/SF/yr`;
-        },
-        className: 'cell-dollar'
-      }
-    ];
-
+  
     renderTableHeader(schema, thead);
-
+  
     tbody.innerHTML = '';
-
+  
     const labelColIdx = Math.max(0, schema.findIndex(col => col.isLabel));
-    const totalFields = ['months', 'base', 'taxes', 'cam', 'ins', 'mgmt', 'totalNet', 'totalGross', 'abatement'];
-    const totals = Object.fromEntries(totalFields.map(key => [key, 0]));
+    const psfKeys = schema.filter(col => col.isPSF && col.key).map(col => col.key);
+    const sumKeys = schema.filter(col => typeof col.sum === 'function').map(col => col.key);
 
-    annualRows.forEach(row => {
-      const tr = document.createElement('tr');
-      schema.forEach(col => {
-        const td = document.createElement('td');
-        if (col.className) {
-          col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
-        }
-        const value = typeof col.render === 'function' ? col.render(row) : '';
-        td.textContent = value == null ? '' : value;
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
+    const buildRows = (typeof window.buildYearlyAbatementRows === 'function')
+      ? window.buildYearlyAbatementRows
+      : null;
+    const renderHelper = (typeof window.renderYearlyAbatementTable === 'function')
+      ? window.renderYearlyAbatementTable
+      : null;
 
-      totalFields.forEach(key => {
-        const increment = Number(row?.[key] || 0);
-        totals[key] += Number.isFinite(increment) ? increment : 0;
-      });
-    });
-
-    const spaceForTotals = annualRows.find(r => Number(r.spaceSF) > 0)?.spaceSF || 0;
-    const totalGross = totals.totalGross || 0;
-    const totalMonths = totals.months || 0;
-    let totalPSF = 0;
-    if (totalGross !== 0 && spaceForTotals > 0 && totalMonths > 0) {
-      const years = totalMonths / 12;
-      if (years > 0) {
-        totalPSF = totalGross / spaceForTotals / years;
-      }
+    if (!buildRows || !renderHelper) {
+      console.warn('[YearlyAbatement] helpers missing; unable to render view.');
+      tbody.innerHTML = '';
+      return;
     }
 
-    const grandRow = document.createElement('tr');
-    grandRow.classList.add('grand-total', 'row-grandtotal');
-
-    schema.forEach((col, idx) => {
-      const td = document.createElement('td');
-      if (col.className) {
-        col.className.split(/\s+/).filter(Boolean).forEach(cls => td.classList.add(cls));
-      }
-
-      if (idx === labelColIdx) {
-        td.textContent = 'Grand Total';
-      } else if (col.key === 'segment') {
-        td.textContent = EM_DASH;
-        td.classList.add('cell-muted');
-      } else if (col.key === 'months') {
-        td.textContent = `${totalMonths}`;
-      } else if (totalFields.includes(col.key)) {
-        td.textContent = fmtUSD(totals[col.key]);
-      } else if (col.key === 'psf') {
-        td.textContent = totalGross === 0 ? '$0.00/SF/yr' : `${fmtUSD(totalPSF)}/SF/yr`;
-      } else {
-        td.textContent = EM_DASH;
-        td.classList.add('cell-muted');
-      }
-
-      grandRow.appendChild(td);
+    const annualData = buildRows(monthlyRows, { perspective, psfKeys, sumKeys });
+    renderHelper({
+      schema,
+      rows: annualData.rows,
+      totals: annualData.totals,
+      tbody,
+      fmtUSD,
+      abatementColumn,
+      labelColIdx,
+      psfKeys,
+      sumKeys
     });
-
-    tbody.appendChild(grandRow);
   }
 
   // -----------------------------------------------------------------------
