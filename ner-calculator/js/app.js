@@ -3775,15 +3775,22 @@ window.addEventListener('load', initMap);
 
       const grouped = new Map();
       safeRows.forEach(row => {
-        const yr = row.year;
-        if (!grouped.has(yr)) grouped.set(yr, []);
-        grouped.get(yr).push(row);
+        const leaseYear = resolveLeaseYear(row);
+        const yearKey = leaseYear ?? (row.year ?? null);
+        if (!grouped.has(yearKey)) grouped.set(yearKey, []);
+        grouped.get(yearKey).push(row);
       });
 
-      const sortedYears = Array.from(grouped.keys()).sort((a, b) => Number(a) - Number(b));
-      const approxEqual = (a, b, epsilon = 1e-9) => Math.abs(a - b) <= epsilon;
-      const baseRentKey = perspective === 'tenant' ? 'baseRentPSF' : 'baseRentPSF_LL';
-
+      const sortedYears = Array.from(grouped.keys()).sort((a, b) => {
+        const numA = Number(a);
+        const numB = Number(b);
+        const aIsNum = Number.isFinite(numA);
+        const bIsNum = Number.isFinite(numB);
+        if (aIsNum && bIsNum) return numA - numB;
+        if (aIsNum) return -1;
+        if (bIsNum) return 1;
+        return String(a ?? '').localeCompare(String(b ?? ''));
+      });
       const monthRangeLabel = (start, end, count) => {
         if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0) {
           return (start === end) ? `${start}` : `${start}\u2013${end}`;
@@ -3808,136 +3815,121 @@ window.addEventListener('load', initMap);
       };
 
       const aggregatedRows = [];
-      let currentGroup = null;
       const grand = {
         hasAbated: false,
         totalAbatedMonths: 0
       };
+      const earliestLeaseMonth = (rows = []) => rows.reduce((min, row) => {
+        const monthIndex = toNumber(row.period);
+        if (!Number.isFinite(monthIndex) || monthIndex <= 0) return min;
+        if (min == null) return monthIndex;
+        return Math.min(min, monthIndex);
+      }, null);
 
-      const flushGroup = (yearRows = []) => {
-        if (!currentGroup) return;
-        const { rows: groupRows, startPeriod, endPeriod, yearKey, isAbated } = currentGroup;
-        if (!Array.isArray(groupRows) || groupRows.length === 0) {
-          currentGroup = null;
-          return;
-        }
-
-        const firstRow = groupRows[0];
-        const monthCount = groupRows.length;
-        const aggRow = {
-          period: labelForGroup(yearKey),
-          leaseYearLabel: labelForGroup(yearKey),
-          year: yearKey ?? '',
-          month: monthRangeLabel(startPeriod, endPeriod, monthCount),
-          segmentLabel: monthRangeLabel(startPeriod, endPeriod, monthCount),
-          segmentMonthCount: monthCount,
-          segmentStartPeriod: startPeriod,
-          segmentEndPeriod: endPeriod,
-          spaceSize: firstRow?.spaceSize ?? 0,
-          cashFactor: firstRow?.cashFactor,
-          isAbated,
-          __monthCount: monthCount
-        };
-
+      const buildAggregatedRow = ({ partitionRows = [], yearRows = [], yearKey = null, isAbated = false, abatedMonthsFullYear = 0 }) => {
+        if (!partitionRows.length) return null;
+        const firstRow = partitionRows[0];
+        const monthCount = partitionRows.length;
         const monthsInPeriod = yearRows.length;
-        aggRow.month = `${monthsInPeriod} Months`;
-        aggRow.__monthsInPeriod = monthsInPeriod;
-
-        const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
-        const segmentAbatedMonths = groupRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
-        aggRow.abatedMonths = abatedMonthsFullYear;
-        aggRow.segmentAbatedMonths = segmentAbatedMonths;
-        if (segmentAbatedMonths > 0 || abatedMonthsFullYear > 0) grand.hasAbated = true;
-        grand.totalAbatedMonths += abatedMonthsFullYear;
-
+        const segmentValues = partitionRows
+          .map(r => Number(r.period) || 0)
+          .filter(val => val > 0);
+        const segMin = segmentValues.length ? Math.min(...segmentValues) : null;
+        const segMax = segmentValues.length ? Math.max(...segmentValues) : null;
         const periodValues = yearRows
           .map(r => Number(r.period) || 0)
           .filter(val => val > 0);
-        if (periodValues.length) {
-          const minP = Math.min(...periodValues);
-          const maxP = Math.max(...periodValues);
-          aggRow.period = (minP === maxP) ? String(minP) : `${minP}\u2013${maxP}`;
-        }
+        const periodMin = periodValues.length ? Math.min(...periodValues) : null;
+        const periodMax = periodValues.length ? Math.max(...periodValues) : null;
 
-        const segmentValues = groupRows
-          .map(r => Number(r.period) || 0)
-          .filter(val => val > 0);
-        if (segmentValues.length) {
-          const segMin = Math.min(...segmentValues);
-          const segMax = Math.max(...segmentValues);
-          aggRow.segmentLabel = (segMin === segMax) ? String(segMin) : `${segMin}\u2013${segMax}`;
-        }
+        const aggRow = {
+          period: periodMin != null && periodMax != null
+            ? (periodMin === periodMax ? String(periodMin) : `${periodMin}\u2013${periodMax}`)
+            : labelForGroup(yearKey),
+          leaseYearLabel: labelForGroup(yearKey),
+          year: yearKey ?? '',
+          month: `${monthsInPeriod} Months`,
+          segmentLabel: monthRangeLabel(segMin, segMax, monthCount),
+          segmentMonthCount: monthCount,
+          segmentStartPeriod: segMin,
+          segmentEndPeriod: segMax,
+          spaceSize: firstRow?.spaceSize ?? 0,
+          cashFactor: firstRow?.cashFactor,
+          isAbated,
+          __monthCount: monthCount,
+          __monthsInPeriod: monthsInPeriod
+        };
 
-        aggRow.__weightSum = groupRows.reduce((sum, row) => sum + weightForRow(row), 0);
+        aggRow.abatedMonths = abatedMonthsFullYear;
+        const segmentAbatedMonths = partitionRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
+        aggRow.segmentAbatedMonths = segmentAbatedMonths;
+
+        aggRow.__weightSum = partitionRows.reduce((sum, row) => sum + weightForRow(row), 0);
 
         safePsfKeys.forEach(key => {
-          if (key in firstRow) {
-            aggRow[key] = firstRow[key];
-          } else {
-            aggRow[key] = 0;
-          }
+          const weightedTotal = partitionRows.reduce((sum, row) => sum + toNumber(row[key]) * weightForRow(row), 0);
+          aggRow[key] = aggRow.__weightSum ? (weightedTotal / aggRow.__weightSum) : 0;
         });
 
         safeSumKeys.forEach(key => {
-          const total = groupRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
+          const total = partitionRows.reduce((sum, row) => sum + toNumber(row[key]), 0);
           aggRow[key] = total;
         });
 
-        const abatementTotal = groupRows.reduce((sum, row) => sum + toNumber(row.abatement$ || 0), 0);
+        const abatementTotal = partitionRows.reduce((sum, row) => sum + toNumber(row.abatement$ || 0), 0);
         aggRow.abatement$ = abatementTotal;
         aggRow.abatementPSF = annualPSFFromDollars
           ? annualPSFFromDollars(abatementTotal, aggRow.spaceSize, aggRow.cashFactor)
           : 0;
 
-        aggregatedRows.push(aggRow);
-        currentGroup = null;
+        if (segmentAbatedMonths > 0 || abatedMonthsFullYear > 0) grand.hasAbated = true;
+        return aggRow;
       };
 
-      sortedYears.forEach(year => {
-        const yearRows = grouped.get(year) || [];
-        currentGroup = null;
+      sortedYears.forEach(yearKey => {
+        const yearRows = grouped.get(yearKey) || [];
+        if (!yearRows.length) return;
 
-        yearRows.forEach(row => {
-          const monthIndex = toNumber(row.period);
-          const leaseYear = resolveLeaseYear(row);
-          const yearKey = leaseYear ?? (row.year ?? null);
-          const baseRentValue = toNumber(row[baseRentKey]);
-          const netValue = toNumber(row.monthlyNet$);
-          const isAbated = Math.abs(netValue) <= 1e-9 || Math.abs(baseRentValue) <= 1e-9;
+        const abatedMonthsFullYear = yearRows.reduce((count, row) => count + (row.isAbated ? 1 : 0), 0);
+        grand.totalAbatedMonths += abatedMonthsFullYear;
+        if (abatedMonthsFullYear > 0) grand.hasAbated = true;
 
-          const psfSnapshot = {};
-          safePsfKeys.forEach(key => {
-            psfSnapshot[key] = toNumber(row[key]);
+        const abatedRows = yearRows.filter(row => !!row.isAbated);
+        const rentRows = yearRows.filter(row => !row.isAbated);
+
+        const rentPartition = rentRows.length
+          ? { rows: rentRows, isAbated: false, earliest: earliestLeaseMonth(rentRows) }
+          : null;
+        const abatedPartition = abatedRows.length
+          ? { rows: abatedRows, isAbated: true, earliest: earliestLeaseMonth(abatedRows) }
+          : null;
+
+        const partitions = [];
+        if (rentPartition) partitions.push(rentPartition);
+        if (abatedPartition) partitions.push(abatedPartition);
+
+        if (partitions.length > 2) {
+          throw new Error(`Lease year ${labelForGroup(yearKey)} exceeded segment limit.`);
+        }
+
+        let orderedPartitions = partitions;
+        if (rentPartition && abatedPartition) {
+          const abatedFirst = (abatedPartition.earliest ?? Infinity) < (rentPartition.earliest ?? Infinity);
+          orderedPartitions = abatedFirst ? [abatedPartition, rentPartition] : [rentPartition, abatedPartition];
+        }
+
+        orderedPartitions.forEach(partition => {
+          const aggRow = buildAggregatedRow({
+            partitionRows: partition.rows,
+            yearRows,
+            yearKey,
+            isAbated: partition.isAbated,
+            abatedMonthsFullYear
           });
-
-          const shouldStartNew = !currentGroup
-            || currentGroup.yearKey !== yearKey
-            || currentGroup.isAbated !== isAbated
-            || safePsfKeys.some(key => !approxEqual(currentGroup.psfValues[key] ?? 0, psfSnapshot[key] ?? 0));
-
-          if (shouldStartNew) {
-            flushGroup(yearRows);
-            currentGroup = {
-              yearKey,
-              isAbated,
-              psfValues: psfSnapshot,
-              rows: [],
-              startPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null,
-              endPeriod: Number.isFinite(monthIndex) && monthIndex > 0 ? monthIndex : null
-            };
+          if (aggRow) {
+            aggregatedRows.push(aggRow);
           }
-
-          currentGroup.rows.push(row);
-          if (Number.isFinite(monthIndex) && monthIndex > 0) {
-            if (!Number.isFinite(currentGroup.startPeriod) || currentGroup.startPeriod == null) {
-              currentGroup.startPeriod = monthIndex;
-            }
-            currentGroup.endPeriod = monthIndex;
-          }
-          currentGroup.psfValues = psfSnapshot;
         });
-
-        flushGroup(yearRows);
       });
 
       const sumTotals = Object.fromEntries(safeSumKeys.map(key => [key, 0]));
